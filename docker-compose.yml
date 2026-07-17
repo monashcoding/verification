@@ -1,0 +1,58 @@
+# Dokploy compose stack (spec §3): single app container serving SPA + API, plus
+# Postgres. POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB all match the project
+# name. Set secrets (CODE_SECRET, POSTGRES_PASSWORD, DISCORD_WEBHOOK_URL) in the
+# Dokploy environment UI — do not commit them.
+
+services:
+  app:
+    build:
+      context: .
+      args:
+        VITE_AUTH_URL: ${VITE_AUTH_URL:-https://auth.monashcoding.com}
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://mac_membership_verify:${POSTGRES_PASSWORD:-mac_membership_verify}@db:5432/mac_membership_verify
+      AUTH_URL: ${AUTH_URL:-https://auth.monashcoding.com}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-mac-suite}
+      MAC_ADMIN_ROLES: ${MAC_ADMIN_ROLES:-exec,committee}
+      CODE_SECRET: ${CODE_SECRET:?set a strong CODE_SECRET in the Dokploy env}
+      CODE_PREFIX: ${CODE_PREFIX:-MAC}
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+      PORT: "3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    # Dokploy attaches its Traefik router to this port for the domain
+    # (verify.monashcoding.com). Exposed for the router / local runs.
+    expose:
+      - "3000"
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mac_membership_verify
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mac_membership_verify}
+      POSTGRES_DB: mac_membership_verify
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mac_membership_verify"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  db-data:

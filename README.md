@@ -51,11 +51,17 @@ backend (`src/server/auth/mac-auth.ts`) verifies it locally against the EdDSA JW
 service's own `examples/verify.ts` (issuer `AUTH_URL`, audience `mac-suite`, canonical id
 `macUserId`).
 
-**Account chooser (§5):** the OAuth redirect is built by mac-auth, whose Google provider does
-**not** set `prompt=select_account`, and we must not modify mac-auth. So the app-side mitigation
-is an explicit **"Not you? Switch account"** control (`AccountBar`) that signs out and
-re-authenticates, plus always showing which account is signed in. Fully forcing the chooser would
-need a one-line `prompt: "select_account"` in mac-auth's Google provider config.
+**Account chooser (§5):** mac-auth now sets `prompt=select_account` on its Google and Microsoft
+providers (suite-wide), so the provider account chooser is forced at login — no silent auto-pick
+of the wrong account. It only applies during an actual OAuth login; an existing MAC session is
+reused untouched. The app additionally shows the signed-in account with a **"Not you? Switch
+account"** control (`AccountBar`) for switching after the fact.
+
+## Deployment
+
+Single container (SPA + API) + Postgres via Dokploy — see
+[`docs/deploy-dokploy.md`](docs/deploy-dokploy.md). Migrations apply automatically on container
+start; auto-deploy triggers on push to `main`.
 
 ## Roster import (step 1)
 
