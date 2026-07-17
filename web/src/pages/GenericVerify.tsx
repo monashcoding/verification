@@ -2,13 +2,15 @@ import { useState } from 'react';
 import { useStatus } from '../useStatus.js';
 import { StudentIdForm } from '../components/StudentIdForm.js';
 import { OutcomeCard } from '../components/Outcome.js';
+import { SignIn } from '../components/SignIn.js';
+import { AccountBar } from '../components/AccountBar.js';
 import type { GenericStatusResponse } from '../types.js';
 
 // Generic entry point (§7): verify.monashcoding.com/. For a member checking
 // their status any time, not tied to one event. Lists active events with buttons
 // instead of redirecting — each event's outcome rendered independently.
 export function GenericVerify() {
-  const { state, setData, login } = useStatus();
+  const { state, setData } = useStatus();
   const [skipped, setSkipped] = useState(false);
 
   if (state.phase === 'loading') return <Centered>Loading…</Centered>;
@@ -17,8 +19,7 @@ export function GenericVerify() {
     return (
       <Centered>
         <h1>MAC member verification</h1>
-        <p>Sign in to check your member pricing across MAC events.</p>
-        <button className="primary" onClick={() => login()}>Sign in</button>
+        <SignIn prompt="Sign in to check your member pricing across MAC events." />
       </Centered>
     );
   }
@@ -29,6 +30,7 @@ export function GenericVerify() {
 
   return (
     <div className="page">
+      <AccountBar />
       <h1>MAC member verification</h1>
 
       {showForm && (

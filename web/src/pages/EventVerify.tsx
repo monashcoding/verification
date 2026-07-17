@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useStatus } from '../useStatus.js';
 import { StudentIdForm } from '../components/StudentIdForm.js';
+import { SignIn } from '../components/SignIn.js';
+import { AccountBar } from '../components/AccountBar.js';
 import type { EventStatusResponse } from '../types.js';
 
 // Event-specific entry point (§7): verify.monashcoding.com/e/{slug}. What
@@ -10,7 +12,7 @@ import type { EventStatusResponse } from '../types.js';
 // silent bounce (§7 "Event-specific entry UX").
 export function EventVerify() {
   const { slug } = useParams<{ slug: string }>();
-  const { state, setData, login } = useStatus(slug);
+  const { state, setData } = useStatus(slug);
   const [skipped, setSkipped] = useState(false);
 
   if (state.phase === 'loading') return <Centered>Checking your membership…</Centered>;
@@ -18,8 +20,7 @@ export function EventVerify() {
   if (state.phase === 'unauthenticated') {
     return (
       <Centered>
-        <p>Sign in to check your MAC member pricing for this event.</p>
-        <button className="primary" onClick={() => login()}>Sign in</button>
+        <SignIn prompt="Sign in to check your MAC member pricing for this event." />
       </Centered>
     );
   }
@@ -52,6 +53,7 @@ export function EventVerify() {
   // Not linked yet → the student-ID step (primary path).
   return (
     <div className="page">
+      <AccountBar />
       <h1>{event.name}</h1>
       <StudentIdForm
         slug={slug}
@@ -94,6 +96,8 @@ function RedirectInterstitial({
       {contactUs && (
         <p className="muted small">Think this is wrong? Contact us and we’ll sort it out.</p>
       )}
+      {/* If this landed on the wrong cached account, let them switch (§5). */}
+      {!member && <AccountBar />}
     </Centered>
   );
 }

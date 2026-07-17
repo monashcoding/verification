@@ -1,24 +1,28 @@
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import type { Request, Response, NextFunction } from 'express';
 
-// Standard mac-auth JWT verification via JWKS (§5). This service is a *consumer*
-// of identity — it never mints or modifies mac-auth tokens/claims.
-//
-// Note the account-chooser requirement (`prompt=select_account`) lives on the
-// login redirect the frontend builds, not here — this module only verifies the
-// resulting token.
+// mac-auth token verification (§5). Mirrors the canonical verifier the auth
+// service ships (monashcoding/mac-auth examples/verify.ts): a Better Auth EdDSA
+// JWT verified locally against the service's JWKS. This service is a *consumer*
+// of identity — it never mints or modifies mac-auth tokens/claims/JWKS.
 
-const JWKS_URL =
-  process.env.MAC_AUTH_JWKS_URL ?? 'https://auth.monashcoding.com/.well-known/jwks.json';
-const ISSUER = process.env.MAC_AUTH_ISSUER ?? 'https://auth.monashcoding.com';
-const AUDIENCE = process.env.MAC_AUTH_AUDIENCE; // optional
+const AUTH_URL = process.env.AUTH_URL ?? 'https://auth.monashcoding.com';
+const ISSUER = AUTH_URL;
+const AUDIENCE = process.env.JWT_AUDIENCE ?? 'mac-suite';
 
-const jwks = createRemoteJWKSet(new URL(JWKS_URL));
+// Cached remote JWKS (Ed25519 public keys), refreshed in the background by jose.
+// Do NOT recreate per request — that would hit the auth service every call.
+const JWKS = createRemoteJWKSet(new URL(`${AUTH_URL}/api/auth/jwks`));
 
+/** The claims a verified MAC token is guaranteed to carry. */
 export interface MacUser {
   macUserId: string;
   email: string;
+  name: string;
   roles: string[];
+  /** Functional team, or null if the person isn't on the committee roster. */
+  team: string | null;
+  ver: number;
 }
 
 declare global {
@@ -30,33 +34,32 @@ declare global {
   }
 }
 
-function extractRoles(payload: Record<string, unknown>): string[] {
-  const raw = payload.roles ?? payload.role ?? [];
-  if (Array.isArray(raw)) return raw.map(String);
-  if (typeof raw === 'string') return [raw];
-  return [];
-}
-
 function bearer(req: Request): string | null {
   const header = req.headers.authorization;
-  if (header?.startsWith('Bearer ')) return header.slice(7).trim();
-  // Fall back to a cookie set by the SPA after login, if present.
-  const cookie = req.headers.cookie
-    ?.split(';')
-    .map((c) => c.trim())
-    .find((c) => c.startsWith('mac_token='));
-  return cookie ? decodeURIComponent(cookie.slice('mac_token='.length)) : null;
+  return header?.startsWith('Bearer ') ? header.slice(7).trim() : null;
 }
 
+/**
+ * Verify a MAC-issued JWT. Throws if the signature, issuer, audience, or expiry
+ * is invalid. Returns the typed MAC claims on success. The canonical user id is
+ * the `macUserId` claim (not `sub`).
+ */
 export async function verifyToken(token: string): Promise<MacUser> {
-  const { payload } = await jwtVerify(token, jwks, {
-    issuer: ISSUER,
-    ...(AUDIENCE ? { audience: AUDIENCE } : {}),
+  const { payload } = await jwtVerify(token, JWKS, {
+    issuer: ISSUER, // checks `iss`
+    audience: AUDIENCE, // checks `aud`
+    // `exp` is enforced by jwtVerify automatically.
   });
-  const macUserId = String(payload.sub ?? '');
-  const email = String(payload.email ?? '').toLowerCase();
-  if (!macUserId) throw new Error('token missing sub');
-  return { macUserId, email, roles: extractRoles(payload as Record<string, unknown>) };
+  const macUserId = payload.macUserId as string | undefined;
+  if (!macUserId) throw new Error('token missing macUserId');
+  return {
+    macUserId,
+    email: ((payload.email as string) ?? '').toLowerCase(),
+    name: (payload.name as string) ?? '',
+    roles: (payload.roles as string[]) ?? [],
+    team: (payload.team as string | null) ?? null,
+    ver: (payload.ver as number) ?? 1,
+  };
 }
 
 /** Populate req.macUser if a valid token is present; never rejects. */
@@ -81,12 +84,13 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
   next();
 }
 
-const ADMIN_ROLES = (process.env.MAC_ADMIN_ROLES ?? 'admin,exec,committee')
+// Admin surfaces (§11) are exec/committee. `member` is a normal member, not admin.
+const ADMIN_ROLES = (process.env.MAC_ADMIN_ROLES ?? 'exec,committee')
   .split(',')
   .map((r) => r.trim().toLowerCase())
   .filter(Boolean);
 
-/** Require an exec/admin role claim (§11). */
+/** Require an exec/committee role claim (§11). */
 export function requireAdmin(req: Request, res: Response, next: NextFunction): void {
   if (!req.macUser) {
     res.status(401).json({ error: 'authentication required' });

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { fetchStatus, UnauthorizedError } from './api.js';
-import { login } from './auth.js';
 import type { StatusResponse } from './types.js';
 
 type State =
@@ -30,5 +29,5 @@ export function useStatus(slug?: string) {
   // Directly replace status data after a student-ID submission (no refetch).
   const setData = useCallback((data: StatusResponse) => setState({ phase: 'ready', data }), []);
 
-  return { state, reload: load, setData, login };
+  return { state, reload: load, setData };
 }

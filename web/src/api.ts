@@ -1,15 +1,20 @@
-import { getToken } from './auth.js';
+import { ensureToken, fetchToken } from './auth.js';
 import type { StatusResponse, StudentIdRetryResponse } from './types.js';
 
 export class UnauthorizedError extends Error {}
 
-async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
-  const token = getToken();
+async function apiFetch(path: string, init: RequestInit = {}, retry = true): Promise<Response> {
+  const token = await ensureToken();
   const headers = new Headers(init.headers);
   headers.set('Content-Type', 'application/json');
   if (token) headers.set('Authorization', `Bearer ${token}`);
+
   const res = await fetch(path, { ...init, headers });
-  if (res.status === 401) throw new UnauthorizedError('not authenticated');
+  if (res.status === 401) {
+    // The 15-minute JWT may have expired — refresh once from the session cookie.
+    if (retry && (await fetchToken())) return apiFetch(path, init, false);
+    throw new UnauthorizedError('not authenticated');
+  }
   return res;
 }
 

@@ -15,7 +15,8 @@ Oracle VM). Matches the rest of the MAC Suite.
 ## Build status (per §12 build order)
 
 - [x] **1. Roster import** — schema, admin upload route, safety gate, xlsx parsing.
-- [x] **2. mac-auth integration** — JWKS JWT verification + admin gating (`src/server/auth`).
+- [x] **2. mac-auth integration** — real Better Auth flow: session-cookie sign-in → JWT → Bearer,
+  EdDSA JWKS verification against `monashcoding/mac-auth` (`macUserId`/`roles`/`team` claims, `mac-suite` audience).
 - [x] **3. Auto-apply link discovery** — confirmed `?discountcode={code}` (§8), `composeAutoApplyUrl`.
 - [x] **4. Linking flow** — email auto-match, student-ID entry, DB rate limiting, skip, full §7 state machine.
 - [x] **5. Code provisioning cron** — deterministic codes, CSV export, Discord ping, Triggers A & B.
@@ -39,8 +40,22 @@ npm run cron:daily-diff       # Trigger B (§9) — wire to a scheduled job
 ```
 
 The frontend lives in `web/` (React + Vite) and is served by Express from `dist/web/` in
-production — one container serving SPA + API (§3). Login forces the account chooser
-(`prompt=select_account`, §5) in `web/src/auth.ts`.
+production — one container serving SPA + API (§3).
+
+### mac-auth
+
+Integration follows [`monashcoding/mac-auth`](https://github.com/monashcoding/mac-auth): the SPA
+POSTs `/api/auth/sign-in/social` → provider → callback sets a `.monashcoding.com` session
+cookie → SPA GETs `/api/auth/token` for a JWT and sends it as `Authorization: Bearer`. The
+backend (`src/server/auth/mac-auth.ts`) verifies it locally against the EdDSA JWKS, mirroring the
+service's own `examples/verify.ts` (issuer `AUTH_URL`, audience `mac-suite`, canonical id
+`macUserId`).
+
+**Account chooser (§5):** the OAuth redirect is built by mac-auth, whose Google provider does
+**not** set `prompt=select_account`, and we must not modify mac-auth. So the app-side mitigation
+is an explicit **"Not you? Switch account"** control (`AccountBar`) that signs out and
+re-authenticates, plus always showing which account is signed in. Fully forcing the chooser would
+need a one-line `prompt: "select_account"` in mac-auth's Google provider config.
 
 ## Roster import (step 1)
 

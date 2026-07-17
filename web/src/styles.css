@@ -96,3 +96,18 @@ button:disabled { opacity: 0.5; cursor: default; }
 
 .events-grid { display: grid; gap: 1rem; }
 .outcome a.as-button { margin-top: 0.5rem; }
+
+.signin { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; }
+.signin .row { justify-content: center; }
+
+.account-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 0.5rem 0 1rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 1rem;
+}
+.account-bar .link-button { padding: 0; }
