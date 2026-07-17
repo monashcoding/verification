@@ -1,0 +1,98 @@
+:root {
+  --bg: #0f1216;
+  --card: #1a1f27;
+  --text: #e8ecf1;
+  --muted: #9aa5b1;
+  --accent: #4f8cff;
+  --accent-2: #2f6fe0;
+  --ok: #3ecf8e;
+  --pending: #f0b429;
+  --border: #2a313b;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.page {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 2.5rem 1.25rem;
+}
+
+.page.centered {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 0.75rem;
+}
+
+h1 { font-size: 1.6rem; margin: 0 0 1rem; }
+h2 { font-size: 1.15rem; margin: 2rem 0 0.75rem; }
+h3 { font-size: 1.05rem; margin: 0 0 0.75rem; }
+
+.muted { color: var(--muted); }
+.small { font-size: 0.85rem; }
+.error { color: #ff6b6b; margin: 0.5rem 0; }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.25rem;
+  margin: 1rem 0;
+}
+
+.field-label { display: block; font-weight: 600; margin-bottom: 0.35rem; }
+
+input {
+  width: 100%;
+  padding: 0.7rem 0.85rem;
+  margin: 0.5rem 0;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #0f1319;
+  color: var(--text);
+  font-size: 1rem;
+}
+input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+
+.row { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; margin-top: 0.75rem; }
+
+button, .as-button {
+  font: inherit;
+  cursor: pointer;
+  border-radius: 8px;
+  padding: 0.65rem 1.1rem;
+  border: none;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.primary { background: var(--accent); color: white; }
+.primary:hover { background: var(--accent-2); }
+.secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
+.link-button { background: none; color: var(--muted); padding: 0.65rem 0.25rem; text-decoration: underline; }
+button:disabled { opacity: 0.5; cursor: default; }
+
+.badge {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.badge.verified { background: rgba(62, 207, 142, 0.15); color: var(--ok); }
+.badge.pending { background: rgba(240, 180, 41, 0.15); color: var(--pending); }
+
+.events-grid { display: grid; gap: 1rem; }
+.outcome a.as-button { margin-top: 0.5rem; }
