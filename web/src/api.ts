@@ -127,13 +127,10 @@ export async function createEvent(input: CreateEventInput): Promise<CreateEventO
   return { kind: 'ok', event: (await res.json()).event };
 }
 
-/** Download the Humanitix discount CSV for an event, triggering a browser save. */
-export async function downloadCodesCsv(
-  eventId: number,
-  slug: string,
-): Promise<{ ok: true } | { ok: false; message: string }> {
-  const res = await authedFetch(`/api/admin/events/${eventId}/codes.csv`);
+async function triggerCsvDownload(res: Response, slug: string): Promise<{ ok: true } | { ok: false; message: string }> {
   if (res.status === 409) return { ok: false, message: (await res.json()).message };
+  if (res.status === 501) return { ok: false, message: 'Humanitix isn’t configured (HUMANITIX_API_KEY).' };
+  if (res.status === 502) return { ok: false, message: `Humanitix error: ${(await res.json()).message ?? ''}` };
   if (!res.ok) return { ok: false, message: `Download failed (${res.status})` };
 
   const blob = await res.blob();
@@ -146,4 +143,45 @@ export async function downloadCodesCsv(
   a.remove();
   URL.revokeObjectURL(url);
   return { ok: true };
+}
+
+/** Download the Humanitix discount CSV for an internal event. */
+export async function downloadCodesCsv(eventId: number, slug: string) {
+  return triggerCsvDownload(await authedFetch(`/api/admin/events/${eventId}/codes.csv`), slug);
+}
+
+// ── Admin: live Humanitix events (auto-listed) ────────────────────────────────
+
+export interface HumanitixEventView {
+  humanitixEventId: string;
+  name: string;
+  url: string;
+  startDate: string | null;
+  endDate: string | null;
+  synced: boolean;
+  slug: string | null;
+  codeCount: number;
+}
+
+export type HumanitixListResult =
+  | { kind: 'ok'; events: HumanitixEventView[] }
+  | { kind: 'not_configured' }
+  | { kind: 'error'; message: string };
+
+export async function fetchHumanitixEvents(): Promise<HumanitixListResult> {
+  const res = await authedFetch('/api/admin/humanitix/events');
+  if (res.status === 501) return { kind: 'not_configured' };
+  if (res.status === 403) throw new ForbiddenError();
+  if (res.status === 502) return { kind: 'error', message: (await res.json()).message ?? 'Humanitix error' };
+  if (!res.ok) return { kind: 'error', message: `Failed (${res.status})` };
+  return { kind: 'ok', events: await res.json() };
+}
+
+/** Download codes for a live Humanitix event (creates the internal record). */
+export async function downloadHumanitixCsv(hxId: string, name: string) {
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'event';
+  return triggerCsvDownload(
+    await authedFetch(`/api/admin/humanitix/events/${encodeURIComponent(hxId)}/codes.csv`),
+    slug,
+  );
 }

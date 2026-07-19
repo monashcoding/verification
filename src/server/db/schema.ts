@@ -43,6 +43,10 @@ export const events = pgTable('events', {
   name: text('name').notNull(),
   slug: text('slug').notNull().unique(),
   humanitixEventUrl: text('humanitix_event_url').notNull(),
+  // Maps to the Humanitix event `_id` when the event was pulled from their API
+  // (null for manually-entered events). Lets us reconcile the live list against
+  // our internal rows without duplicating.
+  humanitixEventId: text('humanitix_event_id').unique(),
   active: boolean('active').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });

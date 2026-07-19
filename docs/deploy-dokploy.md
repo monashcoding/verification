@@ -27,6 +27,7 @@ In Dokploy:
 | `CODE_SECRET` | **yes** | Long random string. Discount codes are derived from it; changing it later changes every code. Compose refuses to start without it. |
 | `POSTGRES_PASSWORD` | recommended | Postgres password (also used in `DATABASE_URL`). Defaults to the project name if unset — set a real one in prod. |
 | `DISCORD_WEBHOOK_URL` | optional | Where code batches are posted (§9). Unset → the cron just logs. |
+| `HUMANITIX_API_KEY` | optional | Read-only key (Humanitix → Settings → API Keys) so the admin lists live events automatically. Unset → manual event entry only. |
 | `AUTH_URL` | optional | Defaults to `https://auth.monashcoding.com`. |
 | `JWT_AUDIENCE` | optional | Defaults to `mac-suite`. |
 | `MAC_ADMIN_ROLES` | optional | Defaults to `exec,committee`. |

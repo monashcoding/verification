@@ -8,6 +8,13 @@
       "when": 1784300863976,
       "tag": "0000_clean_red_wolf",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1784468296596,
+      "tag": "0001_bumpy_gauntlet",
+      "breakpoints": true
     }
   ]
 }
