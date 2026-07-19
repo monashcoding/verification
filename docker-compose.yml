@@ -22,12 +22,12 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    # Dokploy attaches its Traefik router to this port for the domain
-    # (verify.monashcoding.com). Exposed for the router / local runs.
+    # Do NOT publish a host port on the shared Dokploy VM — that collides with
+    # other apps (":::3000 already allocated"). Dokploy's Traefik connects to the
+    # container over the internal network using this exposed port; point the
+    # domain (verify.monashcoding.com) at container port 3000 in the Dokploy UI.
     expose:
       - "3000"
-    ports:
-      - "3000:3000"
     healthcheck:
       test:
         - CMD
