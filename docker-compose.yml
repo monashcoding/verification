@@ -18,6 +18,7 @@ services:
       CODE_SECRET: ${CODE_SECRET:?set a strong CODE_SECRET in the Dokploy env}
       CODE_PREFIX: ${CODE_PREFIX:-MAC}
       DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+      HUMANITIX_API_KEY: ${HUMANITIX_API_KEY:-}
       PORT: "3000"
     depends_on:
       db:
