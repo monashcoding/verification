@@ -61,7 +61,11 @@ function toEvent(r: RawEvent): HumanitixEvent {
 }
 
 function isLive(r: RawEvent): boolean {
-  return !!r.published && !!r.public && !r.isArchived && !r.isPermanentlyArchived;
+  // Deliberately lenient: include private/unlisted events (public === false) —
+  // they still sell via a direct link and still accept CSV discount codes, so we
+  // want member codes for them too. Only archived events are excluded here; past
+  // events are already dropped by the `inFutureOnly=true` query param.
+  return !r.isArchived && !r.isPermanentlyArchived;
 }
 
 /**
