@@ -42,7 +42,17 @@ interface RawEvent {
 
 async function call(path: string): Promise<unknown> {
   if (!API_KEY) throw new HumanitixNotConfigured();
-  const res = await fetch(`${API_BASE}${path}`, { headers: { 'x-api-key': API_KEY } });
+  // Humanitix warns the first request after quiet periods can be slow; bound it
+  // so a hung upstream can't tie up the request indefinitely.
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      headers: { 'x-api-key': API_KEY },
+      signal: AbortSignal.timeout(20_000),
+    });
+  } catch (err) {
+    throw new HumanitixError(`Humanitix request failed: ${(err as Error).message}`);
+  }
   if (!res.ok) {
     throw new HumanitixError(`Humanitix API ${res.status}: ${await res.text().catch(() => '')}`);
   }

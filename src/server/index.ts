@@ -1,5 +1,9 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+// Must be imported before the routers: patches Express 4 so errors thrown from
+// async route handlers reach the error middleware instead of becoming unhandled
+// rejections (which, on Node's default, crash the process → Traefik 502s).
+import 'express-async-errors';
 import express from 'express';
 import { attachUser } from './auth/mac-auth.js';
 import { rosterRouter } from './routes/roster.js';
@@ -40,6 +44,16 @@ app.get(/^(?!\/api\/).*/, (_req, res) => {
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('[unhandled]', err);
   res.status(500).json({ error: 'internal_error' });
+});
+
+// Belt-and-suspenders: never let a stray rejection take the whole service down.
+// express-async-errors should already route request errors to the middleware;
+// this catches anything outside the request lifecycle (timers, etc.).
+process.on('unhandledRejection', (reason) => {
+  console.error('[unhandledRejection]', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[uncaughtException]', err);
 });
 
 const port = Number(process.env.PORT ?? 3000);

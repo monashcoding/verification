@@ -28,6 +28,16 @@ function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   return authedFetch(path, { ...init, headers });
 }
 
+/** Parse a response body as JSON, tolerating non-JSON (e.g. a proxy's plain-text
+ *  "Bad Gateway") so error handling never throws a SyntaxError. */
+async function safeJson(res: Response): Promise<Record<string, unknown>> {
+  try {
+    return (await res.json()) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
 /** GET the resolution status. Pass a slug for the event-specific entry point. */
 export async function fetchStatus(slug?: string): Promise<StatusResponse> {
   const res = await apiFetch(`/api/verify/status${slug ? `/${encodeURIComponent(slug)}` : ''}`);
@@ -128,9 +138,12 @@ export async function createEvent(input: CreateEventInput): Promise<CreateEventO
 }
 
 async function triggerCsvDownload(res: Response, slug: string): Promise<{ ok: true } | { ok: false; message: string }> {
-  if (res.status === 409) return { ok: false, message: (await res.json()).message };
+  if (res.status === 409) return { ok: false, message: String((await safeJson(res)).message ?? 'No codes to export yet.') };
   if (res.status === 501) return { ok: false, message: 'Humanitix isn’t configured (HUMANITIX_API_KEY).' };
-  if (res.status === 502) return { ok: false, message: `Humanitix error: ${(await res.json()).message ?? ''}` };
+  if (res.status === 502) {
+    const msg = String((await safeJson(res)).message ?? '');
+    return { ok: false, message: `Humanitix is unreachable right now${msg ? `: ${msg}` : ''}. Try again in a moment.` };
+  }
   if (!res.ok) return { ok: false, message: `Download failed (${res.status})` };
 
   const blob = await res.blob();
@@ -147,7 +160,12 @@ async function triggerCsvDownload(res: Response, slug: string): Promise<{ ok: tr
 
 /** Download the Humanitix discount CSV for an internal event. */
 export async function downloadCodesCsv(eventId: number, slug: string) {
-  return triggerCsvDownload(await authedFetch(`/api/admin/events/${eventId}/codes.csv`), slug);
+  try {
+    return triggerCsvDownload(await authedFetch(`/api/admin/events/${eventId}/codes.csv`), slug);
+  } catch (err) {
+    if (err instanceof UnauthorizedError) return { ok: false as const, message: 'Your session expired — refresh and sign in again.' };
+    throw err;
+  }
 }
 
 // ── Admin: live Humanitix events (auto-listed) ────────────────────────────────
@@ -169,19 +187,31 @@ export type HumanitixListResult =
   | { kind: 'error'; message: string };
 
 export async function fetchHumanitixEvents(): Promise<HumanitixListResult> {
-  const res = await authedFetch('/api/admin/humanitix/events');
+  let res: Response;
+  try {
+    res = await authedFetch('/api/admin/humanitix/events');
+  } catch (err) {
+    if (err instanceof UnauthorizedError) return { kind: 'error', message: 'Your session expired — refresh the page and sign in again.' };
+    throw err;
+  }
   if (res.status === 501) return { kind: 'not_configured' };
   if (res.status === 403) throw new ForbiddenError();
-  if (res.status === 502) return { kind: 'error', message: (await res.json()).message ?? 'Humanitix error' };
-  if (!res.ok) return { kind: 'error', message: `Failed (${res.status})` };
+  if (res.status === 502 || res.status === 504) {
+    const msg = String((await safeJson(res)).message ?? '');
+    return { kind: 'error', message: `Humanitix is unreachable right now${msg ? `: ${msg}` : ''}. Try again in a moment.` };
+  }
+  if (!res.ok) return { kind: 'error', message: `Failed to load events (${res.status})` };
   return { kind: 'ok', events: await res.json() };
 }
 
 /** Download codes for a live Humanitix event (creates the internal record). */
 export async function downloadHumanitixCsv(hxId: string, name: string) {
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'event';
-  return triggerCsvDownload(
-    await authedFetch(`/api/admin/humanitix/events/${encodeURIComponent(hxId)}/codes.csv`),
-    slug,
-  );
+  try {
+    const res = await authedFetch(`/api/admin/humanitix/events/${encodeURIComponent(hxId)}/codes.csv`);
+    return triggerCsvDownload(res, slug);
+  } catch (err) {
+    if (err instanceof UnauthorizedError) return { ok: false as const, message: 'Your session expired — refresh and sign in again.' };
+    throw err;
+  }
 }
