@@ -39,7 +39,10 @@ discount code, without switching ticketing platforms or touching payments.
 - **Never reveal which part of a student-ID check failed** (wrong number / not ENROLLED /
   not found at all). One generic retry message covers all three.
 - **Rate-limit student ID attempts in the database, not in session/client state** — a page
-  reload must not reset the counter. 5 attempts, 24h cooldown from the last attempt.
+  reload must not reset the counter. The cap exists only to stop scripted enumeration of
+  student IDs, not to inconvenience real members, so it's deliberately generous: **20 failed
+  attempts, 1h cooldown from the last attempt**. (Earlier drafts used 5/24h — don't "restore"
+  the tighter numbers; the loosening was intentional.) Counter resets once the window elapses.
 - **Passive on lapsed membership.** `ENROLLED → INACTIVE` does not trigger any revocation
   logic. There's no way to pull back a code that's already live on Humanitix without a manual
   dashboard edit, so don't build machinery that pretends otherwise.
@@ -55,9 +58,16 @@ discount code, without switching ticketing platforms or touching payments.
   `{event_url}?discountcode={code}`. No further discovery needed — this was verified against
   a real test code.
 - **No browser automation against the Humanitix dashboard.** The manual CSV upload is the
-  intended design, not a gap to script around — there's no API for this, and scripting a UI
-  Humanitix can change any time is exactly the kind of fragile, undebuggable-by-a-future-
-  committee-member thing this whole suite is trying to avoid.
+  intended design, not a gap to script around — there's *no API for the discount upload*, and
+  scripting a UI Humanitix can change any time is exactly the kind of fragile, undebuggable-by-
+  a-future-committee-member thing this whole suite is trying to avoid.
+- **The read-only Humanitix Public API is fine and is used — for listing only.** With
+  `HUMANITIX_API_KEY` set, the admin pulls the org's live/upcoming events (official `x-api-key`
+  API, `src/server/humanitix/`) so an officer doesn't hand-enter each event URL, and a one-click
+  path provisions codes + downloads that event's CSV. This is the sanctioned opposite of
+  dashboard scripting: we only ever *read* the event list and a single event's details — never
+  order/ticket sync, never a write back to Humanitix. Uploading the discount CSV stays manual.
+  Unset the key and the admin falls back to manual event entry.
 - **Don't hard-delete roster rows, links, or codes.** Import replaces the roster snapshot
   wholesale, but keep prior batches queryable via `import_batch_id` rather than deleting.
 

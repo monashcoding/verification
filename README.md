@@ -84,3 +84,25 @@ stops a wrong-sheet or half-downloaded file from silently gutting the membership
 
 Each import replaces the roster snapshot wholesale under a new `import_batch_id`; prior batches
 are kept queryable, never hard-deleted.
+
+## Events & member codes (steps 5, 8)
+
+Every enrolled member gets a **distinct discount code per event** (`member_event_codes`, keyed on
+`roster_id` + `event_id`) — MAC's member pricing is set ad hoc per event, so a single global code
+can't reproduce the right price everywhere. Officers never touch codes by hand; the admin panel
+generates them and hands back a CSV.
+
+**Auto-listing (primary path).** Set `HUMANITIX_API_KEY` (Humanitix account → Settings → API
+Keys) and the admin lists the org's live, upcoming events straight from the Humanitix **read-only**
+Public API — no per-event URL entry. Each row shows whether codes exist yet; **Download codes CSV**
+provisions codes for that event and downloads the file in one click. This is the official
+`x-api-key` API used for *reading only* (event list + one event's details) — not dashboard
+scripting, not order/ticket sync. Uploading that CSV into each event's **Promote → Discounts → CSV
+upload** stays a manual step by design (there is no discount-upload API). Unset the key and the
+admin falls back to manual event entry.
+
+The auto-apply link handed to verified members is `{event_url}?discountcode={code}` (§8).
+
+**Student-ID rate limit (§7).** Failed student-ID lookups are throttled in the DB (survives page
+reloads): **20 failed attempts, then a 1h cooldown** from the last attempt. The cap only exists to
+stop scripted ID enumeration — a real member who mistypes effectively never hits it.
