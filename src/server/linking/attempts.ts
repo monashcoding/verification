@@ -3,11 +3,14 @@ import { db } from '../db/index.js';
 import { rosterLinkAttempts } from '../db/schema.js';
 
 // Rate limiting for the student-ID field (§4, §7). Persisted in the DB — a page
-// reload must not reset the counter. Cap 5 failed attempts, then drop to the
-// "not linked" state; the counter resets 24h after the last attempt.
+// reload must not reset the counter. This exists to stop scripted enumeration of
+// student IDs (its only real threat), not to inconvenience real members, so the
+// cap is deliberately generous: a genuine mistyper effectively never hits it,
+// while automated guessing is still throttled. Counter resets after the window
+// from the last attempt.
 
-export const MAX_FAILED_ATTEMPTS = 5;
-export const COOLDOWN_MS = 24 * 60 * 60 * 1000;
+export const MAX_FAILED_ATTEMPTS = 20;
+export const COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
 
 export interface AttemptState {
   /** Effective failed count after applying the 24h reset window. */
