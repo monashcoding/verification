@@ -1,4 +1,4 @@
-import { and, eq, isNull, sql, asc } from 'drizzle-orm';
+import { and, eq, isNull, sql, asc, inArray } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { roster, memberEventCodes, auditLog } from '../db/schema.js';
 import { latestImportBatchId } from '../roster/query.js';
@@ -128,10 +128,7 @@ export async function buildPendingBatch(eventId: number): Promise<PendingBatch> 
 /** Mark a set of codes as exported (optimistic — §9: no upload confirmation). */
 export async function markExported(codeIds: number[], now = new Date()): Promise<void> {
   if (codeIds.length === 0) return;
-  await db
-    .update(memberEventCodes)
-    .set({ exportedAt: now })
-    .where(sql`${memberEventCodes.id} = any(${codeIds})`);
+  await db.update(memberEventCodes).set({ exportedAt: now }).where(inArray(memberEventCodes.id, codeIds));
   await db.insert(auditLog).values({
     actorMacUserId: null,
     action: 'codes_exported',
