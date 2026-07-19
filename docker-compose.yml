@@ -22,12 +22,22 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    # Do NOT publish a host port on the shared Dokploy VM — that collides with
-    # other apps (":::3000 already allocated"). Dokploy's Traefik connects to the
-    # container over the internal network using this exposed port; point the
-    # domain (verify.monashcoding.com) at container port 3000 in the Dokploy UI.
+    # No host port on the shared Dokploy VM (collides with other apps). Instead the
+    # app joins Dokploy's Traefik network and declares routing via labels below.
     expose:
       - "3000"
+    networks:
+      # Reachable by Dokploy's Traefik proxy…
+      - dokploy-network
+      # …and a private network to talk to Postgres.
+      - internal
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=dokploy-network
+      - traefik.http.routers.verify.rule=Host(`${APP_DOMAIN:-verify.monashcoding.com}`)
+      - traefik.http.routers.verify.entrypoints=websecure
+      - traefik.http.routers.verify.tls.certresolver=letsencrypt
+      - traefik.http.services.verify.loadbalancer.server.port=3000
     healthcheck:
       test:
         - CMD
@@ -48,6 +58,8 @@ services:
       POSTGRES_DB: mac_membership_verify
     volumes:
       - db-data:/var/lib/postgresql/data
+    networks:
+      - internal
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U mac_membership_verify"]
       interval: 10s
@@ -56,3 +68,10 @@ services:
 
 volumes:
   db-data:
+
+networks:
+  # Dokploy's shared proxy network — created by Dokploy, so we join it as external.
+  dokploy-network:
+    external: true
+  internal:
+    driver: bridge
