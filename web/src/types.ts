@@ -13,6 +13,11 @@ export type EventOutcome =
 export interface EventView {
   slug: string;
   name: string;
+  description: string | null;
+  bannerImageUrl: string | null;
+  venueName: string | null;
+  startDate: string | null;
+  endDate: string | null;
   outcome: EventOutcome;
 }
 

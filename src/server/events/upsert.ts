@@ -13,9 +13,29 @@ function slugify(s: string): string {
  * so this is what lets "download CSV for a live Humanitix event" work without the
  * officer hand-entering the URL. Returns the internal Event.
  */
+// Preview metadata refreshed from Humanitix on every sync, so an edited banner or
+// description shows up without re-creating the event. Kept separate from the
+// identity fields (name/slug/url) that anchor codes.
+function previewFields(hx: HumanitixEvent) {
+  return {
+    description: hx.description,
+    bannerImageUrl: hx.bannerImageUrl,
+    venueName: hx.venueName,
+    startDate: hx.startDate ? new Date(hx.startDate) : null,
+    endDate: hx.endDate ? new Date(hx.endDate) : null,
+  };
+}
+
 export async function upsertFromHumanitix(hx: HumanitixEvent): Promise<Event> {
   const [existing] = await db.select().from(events).where(eq(events.humanitixEventId, hx.id));
-  if (existing) return existing;
+  if (existing) {
+    const [updated] = await db
+      .update(events)
+      .set(previewFields(hx))
+      .where(eq(events.id, existing.id))
+      .returning();
+    return updated ?? existing;
+  }
 
   const base = slugify(hx.slug || hx.name);
   // Keep the slug unique even if two Humanitix events slugify the same.
@@ -30,6 +50,7 @@ export async function upsertFromHumanitix(hx: HumanitixEvent): Promise<Event> {
         humanitixEventUrl: hx.url,
         humanitixEventId: hx.id,
         active: true,
+        ...previewFields(hx),
       })
       .onConflictDoNothing()
       .returning();

@@ -25,6 +25,10 @@ export interface HumanitixEvent {
   slug: string;
   startDate: string | null;
   endDate: string | null;
+  /** Preview metadata (for the verify page). Plain text, HTML stripped. */
+  description: string | null;
+  bannerImageUrl: string | null;
+  venueName: string | null;
 }
 
 interface RawEvent {
@@ -34,10 +38,32 @@ interface RawEvent {
   slug?: string;
   startDate?: string;
   endDate?: string;
+  description?: string;
+  bannerImage?: { url?: string } | null;
+  eventLocation?: { venueName?: string } | null;
+  location?: { venueName?: string } | null;
   public?: boolean;
   published?: boolean;
   isArchived?: boolean;
   isPermanentlyArchived?: boolean;
+}
+
+/** Humanitix descriptions are HTML. Reduce to a trimmed plain-text preview. */
+function htmlToText(html: string | undefined): string | null {
+  if (!html) return null;
+  const text = html
+    .replace(/<\/(p|div|li|h[1-6]|br)>/gi, ' ')
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&quot;/gi, '"')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return text || null;
 }
 
 async function call(path: string): Promise<unknown> {
@@ -67,6 +93,9 @@ function toEvent(r: RawEvent): HumanitixEvent {
     slug: r.slug ?? '',
     startDate: r.startDate ?? null,
     endDate: r.endDate ?? null,
+    description: htmlToText(r.description),
+    bannerImageUrl: r.bannerImage?.url ?? null,
+    venueName: r.eventLocation?.venueName ?? r.location?.venueName ?? null,
   };
 }
 

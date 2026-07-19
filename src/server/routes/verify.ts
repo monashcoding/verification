@@ -36,6 +36,11 @@ function serializeEvent(event: Event, outcome: EventOutcome) {
   return {
     slug: event.slug,
     name: event.name,
+    description: event.description,
+    bannerImageUrl: event.bannerImageUrl,
+    venueName: event.venueName,
+    startDate: event.startDate ? event.startDate.toISOString() : null,
+    endDate: event.endDate ? event.endDate.toISOString() : null,
     outcome,
   };
 }

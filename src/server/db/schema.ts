@@ -48,6 +48,14 @@ export const events = pgTable('events', {
   // our internal rows without duplicating.
   humanitixEventId: text('humanitix_event_id').unique(),
   active: boolean('active').notNull().default(true),
+  // Preview metadata, populated from the Humanitix API when an event is synced
+  // (null for manually-entered events — the preview degrades gracefully). Purely
+  // for display on the verify page; never part of the membership/code logic.
+  description: text('description'),
+  bannerImageUrl: text('banner_image_url'),
+  venueName: text('venue_name'),
+  startDate: timestamp('start_date', { withTimezone: true }),
+  endDate: timestamp('end_date', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
