@@ -4,6 +4,7 @@ import { useStatus } from '../useStatus.js';
 import { StudentIdForm } from '../components/StudentIdForm.js';
 import { SignIn } from '../components/SignIn.js';
 import { AccountBar } from '../components/AccountBar.js';
+import { Brand } from '../components/Brand.js';
 import type { EventStatusResponse } from '../types.js';
 
 // Event-specific entry point (§7): verify.monashcoding.com/e/{slug}. What
@@ -20,6 +21,7 @@ export function EventVerify() {
   if (state.phase === 'unauthenticated') {
     return (
       <Centered>
+        <Brand />
         <SignIn prompt="Sign in to check your MAC member pricing for this event." />
       </Centered>
     );
@@ -54,6 +56,7 @@ export function EventVerify() {
   return (
     <div className="page">
       <AccountBar />
+      <Brand />
       <h1>{event.name}</h1>
       <StudentIdForm
         slug={slug}

@@ -9,6 +9,7 @@ import {
 import type { RosterSummary } from '../types.js';
 import { SignIn } from '../components/SignIn.js';
 import { AccountBar } from '../components/AccountBar.js';
+import { Brand } from '../components/Brand.js';
 import { EventsAdmin } from '../components/EventsAdmin.js';
 
 // Admin panel (§11). Currently: roster upload + visibility. Events CRUD and the
@@ -36,6 +37,7 @@ export function Admin() {
   if (phase === 'unauth') {
     return (
       <div className="page centered">
+        <Brand />
         <h1>Admin</h1>
         <SignIn prompt="Sign in with your committee account to manage the roster." />
       </div>
@@ -44,6 +46,7 @@ export function Admin() {
   if (phase === 'forbidden') {
     return (
       <div className="page centered">
+        <Brand />
         <h1>Admin</h1>
         <p>This account isn’t exec/committee, so it can’t manage the roster.</p>
         <AccountBar />
@@ -54,6 +57,7 @@ export function Admin() {
   return (
     <div className="page">
       <AccountBar />
+      <Brand />
       <h1>Roster admin</h1>
       <RosterSummaryCard summary={summary} />
       <RosterUpload onImported={loadSummary} />
