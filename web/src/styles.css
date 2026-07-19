@@ -111,3 +111,9 @@ button:disabled { opacity: 0.5; cursor: default; }
   margin-bottom: 1rem;
 }
 .account-bar .link-button { padding: 0; }
+
+.stats { display: flex; gap: 1.5rem; margin: 0.5rem 0; }
+.stat-value { font-size: 1.8rem; font-weight: 700; }
+.stat-value.ok { color: var(--ok); }
+input[type="file"] { padding: 0.5rem 0; background: none; border: none; }
+code { background: rgba(255,255,255,0.06); padding: 0.1rem 0.35rem; border-radius: 4px; }

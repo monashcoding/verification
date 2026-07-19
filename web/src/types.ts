@@ -35,3 +35,12 @@ export interface StudentIdRetryResponse {
   message: string;
   attemptsRemaining: number;
 }
+
+export interface RosterSummary {
+  hasRoster: boolean;
+  total: number;
+  enrolled: number;
+  inactive: number;
+  importedAt?: string;
+  importBatchId?: string;
+}

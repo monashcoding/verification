@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { GenericVerify } from './pages/GenericVerify.js';
 import { EventVerify } from './pages/EventVerify.js';
+import { Admin } from './pages/Admin.js';
 import './styles.css';
 
 // The session cookie (set by mac-auth on the callback) is exchanged for a JWT
@@ -14,6 +15,7 @@ createRoot(document.getElementById('root')!).render(
       <Routes>
         <Route path="/" element={<GenericVerify />} />
         <Route path="/e/:slug" element={<EventVerify />} />
+        <Route path="/admin" element={<Admin />} />
       </Routes>
     </BrowserRouter>
   </React.StrictMode>,
