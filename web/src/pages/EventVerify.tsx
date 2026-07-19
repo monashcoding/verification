@@ -1,16 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useStatus } from '../useStatus.js';
 import { StudentIdForm } from '../components/StudentIdForm.js';
+import { OutcomeCard } from '../components/Outcome.js';
 import { SignIn } from '../components/SignIn.js';
 import { AccountBar } from '../components/AccountBar.js';
-import { Brand } from '../components/Brand.js';
 import type { EventStatusResponse } from '../types.js';
 
 // Event-specific entry point (§7): verify.monashcoding.com/e/{slug}. What
-// marketing links to. Resolves membership then redirects to that one event —
-// but always with a visible interstitial + a manual "Continue" button, never a
-// silent bounce (§7 "Event-specific entry UX").
+// marketing links to. Shows the event as a preview card (consistent with the
+// generic page) with a manual action — never a silent bounce (§7).
 export function EventVerify() {
   const { slug } = useParams<{ slug: string }>();
   const { state, setData } = useStatus(slug);
@@ -21,7 +20,6 @@ export function EventVerify() {
   if (state.phase === 'unauthenticated') {
     return (
       <Centered>
-        <Brand />
         <SignIn prompt="Sign in to check your MAC member pricing for this event." />
       </Centered>
     );
@@ -29,79 +27,30 @@ export function EventVerify() {
 
   const data = state.data as EventStatusResponse;
   const { link, event } = data;
+  // Not linked yet and still able to try → the student-ID step (primary path).
+  const showForm = !link.linked && link.canEnterStudentId && !skipped;
 
-  // Verified with a code, or not a member — either way we send them onward with
-  // a confirmation screen so they understand where they're going.
-  if (link.linked && event.outcome.state === 'code_ready') {
-    return <RedirectInterstitial url={event.outcome.autoApplyUrl} member />;
-  }
-  if (!link.linked && !link.canEnterStudentId) {
-    // Skipped-through / attempts exhausted → plain ticket link.
-    const url = event.outcome.state === 'not_member' ? event.outcome.ticketUrl : '#';
-    return <RedirectInterstitial url={url} member={false} contactUs={link.contactUs} />;
-  }
-  if (skipped && event.outcome.state === 'not_member') {
-    return <RedirectInterstitial url={event.outcome.ticketUrl} member={false} />;
-  }
-  if (link.linked && event.outcome.state === 'pending') {
-    return (
-      <Centered>
-        <p className="badge pending">Verified</p>
-        <p>You’re verified — your code for this event is being set up. Check back soon.</p>
-      </Centered>
-    );
-  }
-
-  // Not linked yet → the student-ID step (primary path).
   return (
     <div className="page">
       <AccountBar />
-      <Brand />
       <h1>{event.name}</h1>
-      <StudentIdForm
-        slug={slug}
-        attemptsRemaining={link.attemptsRemaining}
-        onResolved={(r) => r.ok && setData(r.status)}
-        onSkip={() => setSkipped(true)}
-      />
-    </div>
-  );
-}
+      {/* When the student-ID form is showing, the card is a pure preview and the
+          form carries the action; otherwise the card's own CTA sends them on. */}
+      <OutcomeCard event={event} previewOnly={showForm} />
 
-function RedirectInterstitial({
-  url,
-  member,
-  contactUs,
-}: {
-  url: string;
-  member: boolean;
-  contactUs?: boolean;
-}) {
-  useEffect(() => {
-    if (url === '#') return;
-    const t = setTimeout(() => window.location.assign(url), 1500);
-    return () => clearTimeout(t);
-  }, [url]);
+      {showForm && (
+        <StudentIdForm
+          slug={slug}
+          attemptsRemaining={link.attemptsRemaining}
+          onResolved={(r) => r.ok && setData(r.status)}
+          onSkip={() => setSkipped(true)}
+        />
+      )}
 
-  return (
-    <Centered>
-      {member ? (
-        <>
-          <p className="badge verified">You’re verified!</p>
-          <p>Redirecting you to tickets with your member discount applied…</p>
-        </>
-      ) : (
-        <p>Redirecting you to tickets…</p>
-      )}
-      {url !== '#' && (
-        <a className="primary as-button" href={url}>Continue to tickets</a>
-      )}
-      {contactUs && (
+      {link.contactUs && (
         <p className="muted small">Think this is wrong? Contact us and we’ll sort it out.</p>
       )}
-      {/* If this landed on the wrong cached account, let them switch (§5). */}
-      {!member && <AccountBar />}
-    </Centered>
+    </div>
   );
 }
 

@@ -4,7 +4,6 @@ import { StudentIdForm } from '../components/StudentIdForm.js';
 import { OutcomeCard } from '../components/Outcome.js';
 import { SignIn } from '../components/SignIn.js';
 import { AccountBar } from '../components/AccountBar.js';
-import { Brand } from '../components/Brand.js';
 import type { GenericStatusResponse } from '../types.js';
 
 // Generic entry point (§7): verify.monashcoding.com/. For a member checking
@@ -19,7 +18,6 @@ export function GenericVerify() {
   if (state.phase === 'unauthenticated') {
     return (
       <Centered>
-        <Brand />
         <h1>MAC member verification</h1>
         <SignIn prompt="Sign in to check your member pricing across MAC events." />
       </Centered>
@@ -33,7 +31,6 @@ export function GenericVerify() {
   return (
     <div className="page">
       <AccountBar />
-      <Brand />
       <h1>MAC member verification</h1>
       <p className="lead">
         Check your MAC membership once and unlock member pricing across every event — no switching

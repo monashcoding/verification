@@ -6,7 +6,7 @@ import type { EventView } from '../types.js';
  * top-right, white/5 meta pills, then a single clear action. "Not a member" is a
  * normal outcome, never styled as an error.
  */
-export function OutcomeCard({ event }: { event: EventView }) {
+export function OutcomeCard({ event, previewOnly = false }: { event: EventView; previewOnly?: boolean }) {
   const { outcome } = event;
   const tags = (
     <>
@@ -51,6 +51,7 @@ export function OutcomeCard({ event }: { event: EventView }) {
           </div>
         )}
 
+        {!previewOnly && (
         <div className="event-card-action">
           {outcome.state === 'code_ready' && (
             <a className="primary as-button block" href={outcome.autoApplyUrl}>
@@ -69,6 +70,7 @@ export function OutcomeCard({ event }: { event: EventView }) {
             </a>
           )}
         </div>
+        )}
       </div>
     </div>
   );
