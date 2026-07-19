@@ -9,6 +9,7 @@ import {
 import type { RosterSummary } from '../types.js';
 import { SignIn } from '../components/SignIn.js';
 import { AccountBar } from '../components/AccountBar.js';
+import { EventsAdmin } from '../components/EventsAdmin.js';
 
 // Admin panel (§11). Currently: roster upload + visibility. Events CRUD and the
 // review queue can be added here the same way (they're already API routes).
@@ -56,6 +57,7 @@ export function Admin() {
       <h1>Roster admin</h1>
       <RosterSummaryCard summary={summary} />
       <RosterUpload onImported={loadSummary} />
+      <EventsAdmin />
     </div>
   );
 }

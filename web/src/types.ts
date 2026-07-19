@@ -44,3 +44,13 @@ export interface RosterSummary {
   importedAt?: string;
   importBatchId?: string;
 }
+
+export interface EventAdmin {
+  id: number;
+  name: string;
+  slug: string;
+  humanitixEventUrl: string;
+  active: boolean;
+  createdAt: string;
+  codeCount: number;
+}

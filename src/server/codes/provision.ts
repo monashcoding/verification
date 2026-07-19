@@ -68,6 +68,41 @@ function csvEscape(v: string | number): string {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
+function rowsToCsv(rows: { code: string; quantity: number; maxUsePerOrder: number }[]): string {
+  const lines = [CSV_HEADER];
+  for (const r of rows) {
+    lines.push([r.code, r.quantity, r.maxUsePerOrder].map(csvEscape).join(','));
+  }
+  return lines.join('\n') + '\n';
+}
+
+/**
+ * Build the CSV of ALL codes for an event (whole set to upload to Humanitix),
+ * regardless of export state, plus the ids of any not-yet-exported so the caller
+ * can mark them exported after a manual download.
+ */
+export async function buildEventCsv(
+  eventId: number,
+): Promise<{ csv: string; count: number; unexportedIds: number[] }> {
+  const rows = await db
+    .select({
+      id: memberEventCodes.id,
+      code: memberEventCodes.code,
+      quantity: memberEventCodes.quantity,
+      maxUsePerOrder: memberEventCodes.maxUsePerOrder,
+      exportedAt: memberEventCodes.exportedAt,
+    })
+    .from(memberEventCodes)
+    .where(eq(memberEventCodes.eventId, eventId))
+    .orderBy(asc(memberEventCodes.code));
+
+  return {
+    csv: rowsToCsv(rows),
+    count: rows.length,
+    unexportedIds: rows.filter((r) => r.exportedAt === null).map((r) => r.id),
+  };
+}
+
 /** Build the un-exported (exported_at IS NULL) batch of codes for one event. */
 export async function buildPendingBatch(eventId: number): Promise<PendingBatch> {
   const rows = await db
@@ -82,15 +117,10 @@ export async function buildPendingBatch(eventId: number): Promise<PendingBatch> 
     .where(and(eq(memberEventCodes.eventId, eventId), isNull(memberEventCodes.exportedAt)))
     .orderBy(asc(memberEventCodes.generatedAt));
 
-  const lines = [CSV_HEADER];
-  for (const r of rows) {
-    lines.push([r.code, r.quantity, r.maxUsePerOrder].map(csvEscape).join(','));
-  }
-
   return {
     count: rows.length,
     codeIds: rows.map((r) => r.id),
-    csv: lines.join('\n') + '\n',
+    csv: rowsToCsv(rows),
     oldestGeneratedAt: rows[0]?.generatedAt ?? null,
   };
 }

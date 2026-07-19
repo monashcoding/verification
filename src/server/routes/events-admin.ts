@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { events, auditLog } from '../db/schema.js';
+import { events, memberEventCodes, auditLog } from '../db/schema.js';
 import { requireAdmin } from '../auth/mac-auth.js';
 import { onEventPublished } from '../codes/cron.js';
+import { provisionEventCodes, buildEventCsv, markExported } from '../codes/provision.js';
 
 export const eventsAdminRouter = Router();
 
@@ -37,9 +38,51 @@ async function fireTriggerA(eventId: number): Promise<{ provisioned: number; exp
   }
 }
 
-// GET /api/admin/events
+// GET /api/admin/events — with a per-event count of generated codes.
 eventsAdminRouter.get('/', requireAdmin, async (_req, res) => {
-  res.json(await db.select().from(events).orderBy(events.name));
+  const rows = await db
+    .select({
+      id: events.id,
+      name: events.name,
+      slug: events.slug,
+      humanitixEventUrl: events.humanitixEventUrl,
+      active: events.active,
+      createdAt: events.createdAt,
+      codeCount: sql<number>`count(${memberEventCodes.id})::int`,
+    })
+    .from(events)
+    .leftJoin(memberEventCodes, eq(memberEventCodes.eventId, events.id))
+    .groupBy(events.id)
+    .orderBy(events.name);
+  res.json(rows);
+});
+
+// GET /api/admin/events/:id/codes.csv — the full Humanitix discount CSV for an
+// event. Provisions any missing codes first (so newly-linked members are always
+// included), then marks the batch exported (optimistic, §9).
+eventsAdminRouter.get('/:id/codes.csv', requireAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ error: 'invalid_id' });
+    return;
+  }
+  const [event] = await db.select().from(events).where(eq(events.id, id));
+  if (!event) {
+    res.status(404).json({ error: 'not_found' });
+    return;
+  }
+
+  await provisionEventCodes(id);
+  const { csv, count, unexportedIds } = await buildEventCsv(id);
+  if (count === 0) {
+    res.status(409).json({ error: 'no_codes', message: 'No enrolled members to generate codes for — import the roster first.' });
+    return;
+  }
+  await markExported(unexportedIds);
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="codes-${event.slug}.csv"`);
+  res.send(csv);
 });
 
 // POST /api/admin/events

@@ -1,5 +1,5 @@
 import { ensureToken, fetchToken } from './auth.js';
-import type { RosterSummary, StatusResponse, StudentIdRetryResponse } from './types.js';
+import type { EventAdmin, RosterSummary, StatusResponse, StudentIdRetryResponse } from './types.js';
 
 export class UnauthorizedError extends Error {}
 export class ForbiddenError extends Error {}
@@ -93,4 +93,57 @@ export async function uploadRoster(file: File, override: boolean): Promise<Impor
   if (res.status === 422) return { kind: 'parse_error', message: (await res.json()).message };
   if (!res.ok) return { kind: 'error', message: `Upload failed (${res.status})` };
   return { kind: 'ok', result: await res.json() };
+}
+
+// ── Admin: events + codes (§8, §9) ────────────────────────────────────────────
+
+export async function fetchEvents(): Promise<EventAdmin[]> {
+  const res = await authedFetch('/api/admin/events');
+  if (res.status === 403) throw new ForbiddenError();
+  if (!res.ok) throw new Error(`status ${res.status}`);
+  return res.json();
+}
+
+export interface CreateEventInput {
+  name: string;
+  slug: string;
+  humanitixEventUrl: string;
+  active: boolean;
+}
+
+export type CreateEventOutcome =
+  | { kind: 'ok'; event: EventAdmin }
+  | { kind: 'slug_taken' }
+  | { kind: 'invalid' }
+  | { kind: 'forbidden' }
+  | { kind: 'error'; message: string };
+
+export async function createEvent(input: CreateEventInput): Promise<CreateEventOutcome> {
+  const res = await apiFetch('/api/admin/events', { method: 'POST', body: JSON.stringify(input) });
+  if (res.status === 403) return { kind: 'forbidden' };
+  if (res.status === 409) return { kind: 'slug_taken' };
+  if (res.status === 400) return { kind: 'invalid' };
+  if (!res.ok) return { kind: 'error', message: `Failed (${res.status})` };
+  return { kind: 'ok', event: (await res.json()).event };
+}
+
+/** Download the Humanitix discount CSV for an event, triggering a browser save. */
+export async function downloadCodesCsv(
+  eventId: number,
+  slug: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const res = await authedFetch(`/api/admin/events/${eventId}/codes.csv`);
+  if (res.status === 409) return { ok: false, message: (await res.json()).message };
+  if (!res.ok) return { ok: false, message: `Download failed (${res.status})` };
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `codes-${slug}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  return { ok: true };
 }
