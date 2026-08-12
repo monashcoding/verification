@@ -1,5 +1,6 @@
 import { provisionEventCodes, buildPendingBatch, markExported } from './provision.js';
 import { getActiveEvents, getEventBySlug } from '../events/query.js';
+import { deactivatePastEvents } from '../events/retire.js';
 import { discordNotifier, type Notifier } from './notify.js';
 import type { Event } from '../db/schema.js';
 
@@ -51,11 +52,18 @@ export async function onEventPublished(
  * Trigger B (§9): daily diff for still-open events. Catches members who linked
  * after an event's initial batch went out. Only pings when a batch is meaningful
  * (§10) — a single straggler waits until the batch grows or ages past a week.
+ *
+ * Retires events whose date has passed first, so we never provision or notify
+ * for an event that is already over.
  */
 export async function runDailyDiff(
   notifier: Notifier = discordNotifier,
   now = new Date(),
-): Promise<Array<{ slug: string; provisioned: number; exported: number }>> {
+): Promise<{
+  retired: string[];
+  results: Array<{ slug: string; provisioned: number; exported: number }>;
+}> {
+  const retired = await deactivatePastEvents(now);
   const events = await getActiveEvents();
   const results: Array<{ slug: string; provisioned: number; exported: number }> = [];
 
@@ -68,5 +76,5 @@ export async function runDailyDiff(
     }
     results.push({ slug: event.slug, provisioned, exported });
   }
-  return results;
+  return { retired: retired.map((e) => e.slug), results };
 }

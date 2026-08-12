@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { eq, sql } from 'drizzle-orm';
+import { desc, eq, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { events, memberEventCodes, auditLog } from '../db/schema.js';
 import { requireAdmin } from '../auth/mac-auth.js';
 import { onEventPublished } from '../codes/cron.js';
+import { deactivatePastEvents } from '../events/retire.js';
 import { provisionEventCodes, buildEventCsv, markExported } from '../codes/provision.js';
 
 export const eventsAdminRouter = Router();
@@ -38,22 +39,29 @@ async function fireTriggerA(eventId: number): Promise<{ provisioned: number; exp
   }
 }
 
-// GET /api/admin/events — with a per-event count of generated codes.
+// GET /api/admin/events — every internal event, with a per-event count of
+// generated codes. Retires anything whose date has passed first so the panel
+// never shows a finished event as live (the daily cron does the same, this just
+// means an officer opening the page doesn't have to wait for it).
 eventsAdminRouter.get('/', requireAdmin, async (_req, res) => {
+  await deactivatePastEvents();
   const rows = await db
     .select({
       id: events.id,
       name: events.name,
       slug: events.slug,
       humanitixEventUrl: events.humanitixEventUrl,
+      humanitixEventId: events.humanitixEventId,
       active: events.active,
+      startDate: events.startDate,
+      endDate: events.endDate,
       createdAt: events.createdAt,
       codeCount: sql<number>`count(${memberEventCodes.id})::int`,
     })
     .from(events)
     .leftJoin(memberEventCodes, eq(memberEventCodes.eventId, events.id))
     .groupBy(events.id)
-    .orderBy(events.name);
+    .orderBy(desc(events.active), desc(sql`coalesce(${events.startDate}, ${events.createdAt})`));
   res.json(rows);
 });
 
