@@ -16,7 +16,25 @@ import type { EventAdmin } from '../types.js';
 // URL entry is needed — click "Download codes CSV" and the internal event record
 // is created behind the scenes. Manual entry stays as a fallback (no API key, or
 // an event that isn't on Humanitix).
+//
+// Below that, every event this app knows about — including ones synced from
+// Humanitix — so an officer can see which verify links are live. Events whose
+// date has passed are retired automatically (server side) and listed separately.
 export function EventsAdmin() {
+  const [internal, setInternal] = useState<EventAdmin[] | null>(null);
+
+  const loadInternal = useCallback(async () => {
+    try {
+      setInternal(await fetchEvents());
+    } catch {
+      setInternal([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadInternal();
+  }, [loadInternal]);
+
   return (
     <div className="card">
       <h3>Events</h3>
@@ -24,8 +42,9 @@ export function EventsAdmin() {
         Live events pull automatically from Humanitix. Download an event’s CSV and upload it to that
         event’s <em>Promote → Discounts → CSV upload</em> in Humanitix.
       </p>
-      <HumanitixEvents />
-      <ManualEvents />
+      <HumanitixEvents onChanged={loadInternal} />
+      <InternalEvents events={internal} />
+      <ManualEvents onCreated={loadInternal} />
     </div>
   );
 }
@@ -36,7 +55,7 @@ function fmtDate(iso: string | null): string {
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function HumanitixEvents() {
+function HumanitixEvents({ onChanged }: { onChanged: () => void }) {
   const [state, setState] = useState<
     | { phase: 'loading' }
     | { phase: 'ok'; events: HumanitixEventView[] }
@@ -75,7 +94,14 @@ function HumanitixEvents() {
   return (
     <div className="event-list">
       {state.events.map((e) => (
-        <HumanitixRow key={e.humanitixEventId} event={e} onChanged={load} />
+        <HumanitixRow
+          key={e.humanitixEventId}
+          event={e}
+          onChanged={() => {
+            void load();
+            onChanged();
+          }}
+        />
       ))}
     </div>
   );
@@ -115,32 +141,86 @@ function HumanitixRow({ event, onChanged }: { event: HumanitixEventView; onChang
   );
 }
 
-// ── Manual fallback ───────────────────────────────────────────────────────────
+// ── Everything this app knows about ───────────────────────────────────────────
 
-function ManualEvents() {
-  const [open, setOpen] = useState(false);
-  const [events, setEvents] = useState<EventAdmin[] | null>(null);
+// A passed event is retired server-side, so `active` is the live/finished split
+// here. Kept visible (not deleted) so the codes already issued stay auditable.
+function InternalEvents({ events }: { events: EventAdmin[] | null }) {
+  if (!events) return <p className="muted small">Loading events…</p>;
+  if (events.length === 0) return null;
 
-  const load = useCallback(async () => {
-    try {
-      // Only show manually-added events (those without a Humanitix id are the ones
-      // not already listed above). We fetch all and show them for completeness.
-      setEvents(await fetchEvents());
-    } catch {
-      setEvents([]);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (open) void load();
-  }, [open, load]);
+  const live = events.filter((e) => e.active);
+  const past = events.filter((e) => !e.active);
 
   return (
-    <details className="manual-events" open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
+    <>
+      <h4>Verify links</h4>
+      {live.length === 0 ? (
+        <p className="muted small">No live events yet — download a CSV above, or add one manually.</p>
+      ) : (
+        <div className="event-list">
+          {live.map((e) => (
+            <InternalRow key={e.id} event={e} />
+          ))}
+        </div>
+      )}
+      {past.length > 0 && (
+        <details className="past-events">
+          <summary>{past.length} past {past.length === 1 ? 'event' : 'events'}</summary>
+          <p className="muted small">
+            Retired automatically once the event date passed. Their verify links no longer resolve;
+            codes already issued are untouched.
+          </p>
+          <div className="event-list">
+            {past.map((e) => (
+              <InternalRow key={e.id} event={e} past />
+            ))}
+          </div>
+        </details>
+      )}
+    </>
+  );
+}
+
+function InternalRow({ event, past = false }: { event: EventAdmin; past?: boolean }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  async function download() {
+    setBusy(true);
+    setMsg(null);
+    const res = await downloadCodesCsv(event.id, event.slug);
+    setBusy(false);
+    setMsg(res.ok ? 'CSV downloaded.' : res.message);
+  }
+  const dates = [fmtDate(event.startDate), fmtDate(event.endDate)].filter(Boolean).join(' – ');
+  return (
+    <div className="event-row">
+      <div>
+        <strong>{event.name}</strong>
+        <div className="muted small">
+          /e/{event.slug} · {dates ? `${dates} · ` : ''}
+          {event.codeCount} codes
+          {event.humanitixEventId ? '' : ' · manual'}
+        </div>
+        {msg && <div className="muted small">{msg}</div>}
+      </div>
+      {!past && (
+        <button className="secondary" onClick={download} disabled={busy}>
+          {busy ? 'Preparing…' : 'Download codes CSV'}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ── Manual fallback ───────────────────────────────────────────────────────────
+
+function ManualEvents({ onCreated }: { onCreated: () => void }) {
+  return (
+    <details className="manual-events">
       <summary>Add an event manually</summary>
       <p className="muted small">For an event not on Humanitix, or if the API key isn’t set.</p>
-      <CreateEventForm onCreated={load} />
-      <ManualList events={events} />
+      <CreateEventForm onCreated={onCreated} />
     </details>
   );
 }
@@ -192,39 +272,3 @@ function CreateEventForm({ onCreated }: { onCreated: () => void }) {
   );
 }
 
-function ManualList({ events }: { events: EventAdmin[] | null }) {
-  const manual = (events ?? []).filter((e) => e.codeCount >= 0);
-  if (!events) return null;
-  if (manual.length === 0) return null;
-  return (
-    <div className="event-list">
-      {manual.map((e) => (
-        <ManualRow key={e.id} event={e} />
-      ))}
-    </div>
-  );
-}
-
-function ManualRow({ event }: { event: EventAdmin }) {
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-  async function download() {
-    setBusy(true);
-    setMsg(null);
-    const res = await downloadCodesCsv(event.id, event.slug);
-    setBusy(false);
-    setMsg(res.ok ? 'CSV downloaded.' : res.message);
-  }
-  return (
-    <div className="event-row">
-      <div>
-        <strong>{event.name}</strong>
-        <div className="muted small">/e/{event.slug} · {event.codeCount} codes</div>
-        {msg && <div className="muted small">{msg}</div>}
-      </div>
-      <button className="secondary" onClick={download} disabled={busy}>
-        {busy ? 'Preparing…' : 'Download codes CSV'}
-      </button>
-    </div>
-  );
-}

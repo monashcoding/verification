@@ -36,8 +36,15 @@ npm run dev                   # start the API on :3000
 npm run dev:web               # start the Vite SPA on :5173 (proxies /api → :3000)
 npm test                      # unit tests: parser, safety gate, rate limit, codes (no DB)
 npm run build                 # compile server + build SPA into dist/ (single container)
-npm run cron:daily-diff       # Trigger B (§9) — wire to a scheduled job
+npm run cron:daily-diff       # Trigger B (§9) + retire past events — wire to a scheduled job
 ```
+
+Events whose date has passed are retired automatically (`active → false`) — by the daily cron,
+and again whenever the admin events list is loaded. Nothing is deleted: the row, its codes and
+the audit trail stay queryable, and the admin panel lists retired events under "past events".
+Reads (`/e/:slug`, the generic list) also filter on the date, so an event stops being served the
+moment it ends rather than at the next cron run. Manually-entered events with no dates are never
+retired automatically.
 
 The frontend lives in `web/` (React + Vite) and is served by Express from `dist/web/` in
 production — one container serving SPA + API (§3).

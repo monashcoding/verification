@@ -2,7 +2,8 @@ import { runDailyDiff } from './cron.js';
 
 // Entry point for the daily-diff cron (§9 Trigger B). Wire this to a scheduled
 // job (Dokploy cron / systemd timer): `tsx src/server/codes/run-daily-diff.ts`.
-const results = await runDailyDiff();
+const { retired, results } = await runDailyDiff();
+if (retired.length) console.log(`[daily-diff] retired past events: ${retired.join(', ')}`);
 const total = results.reduce(
   (acc, r) => ({ provisioned: acc.provisioned + r.provisioned, exported: acc.exported + r.exported }),
   { provisioned: 0, exported: 0 },

@@ -55,7 +55,11 @@ export interface EventAdmin {
   name: string;
   slug: string;
   humanitixEventUrl: string;
+  /** Set when the event came from the Humanitix API; null for manual entries. */
+  humanitixEventId: string | null;
   active: boolean;
+  startDate: string | null;
+  endDate: string | null;
   createdAt: string;
   codeCount: number;
 }
