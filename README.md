@@ -108,6 +108,14 @@ scripting, not order/ticket sync. Uploading that CSV into each event's **Promote
 upload** stays a manual step by design (there is no discount-upload API). Unset the key and the
 admin falls back to manual event entry.
 
+**Auto-sync.** With the key set, the live Humanitix list is pulled in automatically — on every
+`cron:daily-diff` run and whenever an officer opens the events admin. New live events are created
+internally (active, so the daily diff provisions their codes with no click), and existing ones have
+their preview metadata — banner, description, venue, dates — refreshed. Before this, that metadata
+was only fetched as a side effect of downloading an event's CSV. A missing field in the Humanitix
+payload never blanks a value we already have, so clearing a banner is a manual edit. If the key is
+unset or Humanitix is unreachable, the sync is skipped and everything else proceeds as normal.
+
 The auto-apply link handed to verified members is `{event_url}?discountcode={code}` (§8).
 
 **Student-ID rate limit (§7).** Failed student-ID lookups are throttled in the DB (survives page

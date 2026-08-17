@@ -6,6 +6,7 @@ import { events, memberEventCodes, auditLog } from '../db/schema.js';
 import { requireAdmin } from '../auth/mac-auth.js';
 import { onEventPublished } from '../codes/cron.js';
 import { deactivatePastEvents } from '../events/retire.js';
+import { syncLiveEvents } from '../events/sync.js';
 import { provisionEventCodes, buildEventCsv, markExported } from '../codes/provision.js';
 
 export const eventsAdminRouter = Router();
@@ -40,10 +41,14 @@ async function fireTriggerA(eventId: number): Promise<{ provisioned: number; exp
 }
 
 // GET /api/admin/events — every internal event, with a per-event count of
-// generated codes. Retires anything whose date has passed first so the panel
-// never shows a finished event as live (the daily cron does the same, this just
-// means an officer opening the page doesn't have to wait for it).
+// generated codes. Pulls the live Humanitix list in and retires anything whose
+// date has passed first, so the panel shows every current event with fresh
+// preview metadata and never shows a finished one as live (the daily cron does
+// the same; this just means an officer opening the page doesn't have to wait for
+// it). Code provisioning for newly-synced events is left to the cron.
 eventsAdminRouter.get('/', requireAdmin, async (_req, res) => {
+  const sync = await syncLiveEvents();
+  if (sync.error) console.error('[events-admin] humanitix sync failed', sync.error);
   await deactivatePastEvents();
   const rows = await db
     .select({

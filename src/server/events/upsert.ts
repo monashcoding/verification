@@ -26,12 +26,22 @@ function previewFields(hx: HumanitixEvent) {
   };
 }
 
+// A null here usually means "this payload didn't carry the field" (the list
+// endpoint is lighter than the single-event one) rather than "the officer removed
+// the banner", so an update never blanks a value we already have. Clearing one is
+// a manual edit; a wrong-looking preview beats an empty card.
+function definedPreviewFields(hx: HumanitixEvent) {
+  return Object.fromEntries(Object.entries(previewFields(hx)).filter(([, v]) => v !== null));
+}
+
 export async function upsertFromHumanitix(hx: HumanitixEvent): Promise<Event> {
   const [existing] = await db.select().from(events).where(eq(events.humanitixEventId, hx.id));
   if (existing) {
+    const fields = definedPreviewFields(hx);
+    if (Object.keys(fields).length === 0) return existing;
     const [updated] = await db
       .update(events)
-      .set(previewFields(hx))
+      .set(fields)
       .where(eq(events.id, existing.id))
       .returning();
     return updated ?? existing;
