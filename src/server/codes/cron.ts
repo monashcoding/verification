@@ -1,6 +1,7 @@
 import { provisionEventCodes, buildPendingBatch, markExported } from './provision.js';
 import { getActiveEvents, getEventBySlug } from '../events/query.js';
 import { deactivatePastEvents } from '../events/retire.js';
+import { syncLiveEvents, type SyncResult } from '../events/sync.js';
 import { discordNotifier, type Notifier } from './notify.js';
 import type { Event } from '../db/schema.js';
 
@@ -53,16 +54,20 @@ export async function onEventPublished(
  * after an event's initial batch went out. Only pings when a batch is meaningful
  * (§10) — a single straggler waits until the batch grows or ages past a week.
  *
- * Retires events whose date has passed first, so we never provision or notify
- * for an event that is already over.
+ * Pulls the live Humanitix event list in first (so a newly published event is
+ * provisioned without an officer adding it by hand), then retires events whose
+ * date has passed, so we never provision or notify for an event already over.
  */
 export async function runDailyDiff(
   notifier: Notifier = discordNotifier,
   now = new Date(),
 ): Promise<{
+  sync: SyncResult;
   retired: string[];
   results: Array<{ slug: string; provisioned: number; exported: number }>;
 }> {
+  // Soft-fails (unset key, Humanitix down): still provision for what we have.
+  const sync = await syncLiveEvents();
   const retired = await deactivatePastEvents(now);
   const events = await getActiveEvents();
   const results: Array<{ slug: string; provisioned: number; exported: number }> = [];
@@ -76,5 +81,5 @@ export async function runDailyDiff(
     }
     results.push({ slug: event.slug, provisioned, exported });
   }
-  return { retired: retired.map((e) => e.slug), results };
+  return { sync, retired: retired.map((e) => e.slug), results };
 }

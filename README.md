@@ -99,14 +99,25 @@ Every enrolled member gets a **distinct discount code per event** (`member_event
 can't reproduce the right price everywhere. Officers never touch codes by hand; the admin panel
 generates them and hands back a CSV.
 
-**Auto-listing (primary path).** Set `HUMANITIX_API_KEY` (Humanitix account → Settings → API
-Keys) and the admin lists the org's live, upcoming events straight from the Humanitix **read-only**
-Public API — no per-event URL entry. Each row shows whether codes exist yet; **Download codes CSV**
-provisions codes for that event and downloads the file in one click. This is the official
-`x-api-key` API used for *reading only* (event list + one event's details) — not dashboard
-scripting, not order/ticket sync. Uploading that CSV into each event's **Promote → Discounts → CSV
-upload** stays a manual step by design (there is no discount-upload API). Unset the key and the
-admin falls back to manual event entry.
+**Auto-sync (primary path).** Set `HUMANITIX_API_KEY` (Humanitix account → Settings → API Keys)
+and the org's live, upcoming events pull themselves in from the Humanitix **read-only** Public API —
+no per-event URL entry. The sync runs on every `cron:daily-diff` and whenever an officer opens the
+events admin. New live events are created internally (active, so the daily diff provisions their
+codes with no click) and existing ones get their preview metadata — banner, description, venue,
+dates — refreshed. A missing field in the Humanitix payload never blanks a value we already have, so
+clearing a banner is a manual edit. If the key is unset or Humanitix is unreachable, the sync is
+skipped, the admin says so, and everything else proceeds as normal.
+
+This is the official `x-api-key` API used for *reading only* (event list + one event's details) —
+not dashboard scripting, not order/ticket sync. Uploading each event's CSV into its **Promote →
+Discounts → CSV upload** stays a manual step by design: re-verified against the v1.21.0 OpenAPI
+spec, there is no discounts resource, and the only write endpoints are event create/update (name,
+description, location, dates, keywords, classification) and ticket transfer/check-in.
+
+**One list in the admin.** Because every live Humanitix event is synced into `events`, a live event
+and its verify link are the same row — name, dates, `/e/slug`, code count, and **Download codes
+CSV**. Manual entries are tagged `manual`; past events are retired server-side and collapse into
+their own section.
 
 The auto-apply link handed to verified members is `{event_url}?discountcode={code}` (§8).
 

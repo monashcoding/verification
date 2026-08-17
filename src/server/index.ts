@@ -10,7 +10,6 @@ import { rosterRouter } from './routes/roster.js';
 import { verifyRouter } from './routes/verify.js';
 import { eventsAdminRouter } from './routes/events-admin.js';
 import { reviewAdminRouter } from './routes/review-admin.js';
-import { humanitixAdminRouter } from './routes/humanitix-admin.js';
 
 const app = express();
 app.use(express.json());
@@ -29,7 +28,6 @@ app.use('/api/verify', verifyRouter);
 app.use('/api/admin/roster', rosterRouter);
 app.use('/api/admin/events', eventsAdminRouter);
 app.use('/api/admin/review', reviewAdminRouter);
-app.use('/api/admin/humanitix', humanitixAdminRouter);
 
 // Serve the built SPA (§3, single container serving SPA + API). Compiled server
 // lives at dist/server/, the SPA build at dist/web/.

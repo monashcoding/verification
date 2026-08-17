@@ -107,7 +107,13 @@ export async function uploadRoster(file: File, override: boolean): Promise<Impor
 
 // ── Admin: events + codes (§8, §9) ────────────────────────────────────────────
 
-export async function fetchEvents(): Promise<EventAdmin[]> {
+/** Whether the server managed to pull the live Humanitix list for this response. */
+export interface EventsSyncStatus {
+  configured: boolean;
+  error: string | null;
+}
+
+export async function fetchEvents(): Promise<{ sync: EventsSyncStatus; events: EventAdmin[] }> {
   const res = await authedFetch('/api/admin/events');
   if (res.status === 403) throw new ForbiddenError();
   if (!res.ok) throw new Error(`status ${res.status}`);
@@ -168,50 +174,5 @@ export async function downloadCodesCsv(eventId: number, slug: string) {
   }
 }
 
-// ── Admin: live Humanitix events (auto-listed) ────────────────────────────────
-
-export interface HumanitixEventView {
-  humanitixEventId: string;
-  name: string;
-  url: string;
-  startDate: string | null;
-  endDate: string | null;
-  synced: boolean;
-  slug: string | null;
-  codeCount: number;
-}
-
-export type HumanitixListResult =
-  | { kind: 'ok'; events: HumanitixEventView[] }
-  | { kind: 'not_configured' }
-  | { kind: 'error'; message: string };
-
-export async function fetchHumanitixEvents(): Promise<HumanitixListResult> {
-  let res: Response;
-  try {
-    res = await authedFetch('/api/admin/humanitix/events');
-  } catch (err) {
-    if (err instanceof UnauthorizedError) return { kind: 'error', message: 'Your session expired — refresh the page and sign in again.' };
-    throw err;
-  }
-  if (res.status === 501) return { kind: 'not_configured' };
-  if (res.status === 403) throw new ForbiddenError();
-  if (res.status === 502 || res.status === 504) {
-    const msg = String((await safeJson(res)).message ?? '');
-    return { kind: 'error', message: `Humanitix is unreachable right now${msg ? `: ${msg}` : ''}. Try again in a moment.` };
-  }
-  if (!res.ok) return { kind: 'error', message: `Failed to load events (${res.status})` };
-  return { kind: 'ok', events: await res.json() };
-}
-
-/** Download codes for a live Humanitix event (creates the internal record). */
-export async function downloadHumanitixCsv(hxId: string, name: string) {
-  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'event';
-  try {
-    const res = await authedFetch(`/api/admin/humanitix/events/${encodeURIComponent(hxId)}/codes.csv`);
-    return triggerCsvDownload(res, slug);
-  } catch (err) {
-    if (err instanceof UnauthorizedError) return { ok: false as const, message: 'Your session expired — refresh and sign in again.' };
-    throw err;
-  }
-}
+// Live Humanitix events no longer get their own list here: the server syncs them
+// into `events` on every fetchEvents(), so one list covers everything.

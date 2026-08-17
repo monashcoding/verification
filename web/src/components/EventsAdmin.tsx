@@ -1,39 +1,28 @@
 import { useCallback, useEffect, useState } from 'react';
-import {
-  fetchEvents,
-  createEvent,
-  downloadCodesCsv,
-  fetchHumanitixEvents,
-  downloadHumanitixCsv,
-  type CreateEventInput,
-  type HumanitixEventView,
-} from '../api.js';
+import { fetchEvents, createEvent, downloadCodesCsv, type CreateEventInput, type EventsSyncStatus } from '../api.js';
 import type { EventAdmin } from '../types.js';
 
 // Events admin (§8) + code CSV download (§9).
 //
-// Primary path: pull the org's live events straight from the Humanitix API so no
-// URL entry is needed — click "Download codes CSV" and the internal event record
-// is created behind the scenes. Manual entry stays as a fallback (no API key, or
-// an event that isn't on Humanitix).
-//
-// Below that, every event this app knows about — including ones synced from
-// Humanitix — so an officer can see which verify links are live. Events whose
-// date has passed are retired automatically (server side) and listed separately.
+// One list, not two: the server syncs the org's live Humanitix events into our
+// events table on every load, so a live event and its verify link are the same
+// row. Manual entry stays as a fallback (no API key, or an event that isn't on
+// Humanitix). Events whose date has passed are retired automatically (server
+// side) and tucked into a collapsed section.
 export function EventsAdmin() {
-  const [internal, setInternal] = useState<EventAdmin[] | null>(null);
+  const [state, setState] = useState<{ sync: EventsSyncStatus; events: EventAdmin[] } | null>(null);
 
-  const loadInternal = useCallback(async () => {
+  const load = useCallback(async () => {
     try {
-      setInternal(await fetchEvents());
+      setState(await fetchEvents());
     } catch {
-      setInternal([]);
+      setState({ sync: { configured: true, error: null }, events: [] });
     }
   }, []);
 
   useEffect(() => {
-    void loadInternal();
-  }, [loadInternal]);
+    void load();
+  }, [load]);
 
   return (
     <div className="card">
@@ -42,11 +31,33 @@ export function EventsAdmin() {
         Live events pull automatically from Humanitix. Download an event’s CSV and upload it to that
         event’s <em>Promote → Discounts → CSV upload</em> in Humanitix.
       </p>
-      <HumanitixEvents onChanged={loadInternal} />
-      <InternalEvents events={internal} />
-      <ManualEvents onCreated={loadInternal} />
+      {state && <SyncNotice sync={state.sync} />}
+      <EventList events={state?.events ?? null} />
+      <ManualEvents onCreated={load} />
     </div>
   );
+}
+
+// Only speaks up when the auto-pull didn't happen — otherwise the absence of an
+// event would look like a data problem rather than a configuration one.
+function SyncNotice({ sync }: { sync: EventsSyncStatus }) {
+  if (!sync.configured) {
+    return (
+      <p className="muted small">
+        Auto-listing is off — set <code>HUMANITIX_API_KEY</code> to pull live events in
+        automatically. Add events manually below in the meantime.
+      </p>
+    );
+  }
+  if (sync.error) {
+    return (
+      <p className="error">
+        Couldn’t reach Humanitix just now, so this list may be out of date. Events already synced
+        still work.
+      </p>
+    );
+  }
+  return null;
 }
 
 function fmtDate(iso: string | null): string {
@@ -55,112 +66,22 @@ function fmtDate(iso: string | null): string {
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function HumanitixEvents({ onChanged }: { onChanged: () => void }) {
-  const [state, setState] = useState<
-    | { phase: 'loading' }
-    | { phase: 'ok'; events: HumanitixEventView[] }
-    | { phase: 'not_configured' }
-    | { phase: 'error'; message: string }
-  >({ phase: 'loading' });
-
-  const load = useCallback(async () => {
-    setState({ phase: 'loading' });
-    try {
-      const res = await fetchHumanitixEvents();
-      if (res.kind === 'ok') setState({ phase: 'ok', events: res.events });
-      else if (res.kind === 'not_configured') setState({ phase: 'not_configured' });
-      else setState({ phase: 'error', message: res.message });
-    } catch {
-      setState({ phase: 'error', message: 'Could not load Humanitix events.' });
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  if (state.phase === 'loading') return <p className="muted small">Loading live events from Humanitix…</p>;
-  if (state.phase === 'not_configured') {
-    return (
-      <p className="muted small">
-        Auto-listing is off — set <code>HUMANITIX_API_KEY</code> to pull live events. Add events
-        manually below in the meantime.
-      </p>
-    );
-  }
-  if (state.phase === 'error') return <p className="error">{state.message}</p>;
-  if (state.events.length === 0) return <p className="muted small">No live events on Humanitix right now.</p>;
-
-  return (
-    <div className="event-list">
-      {state.events.map((e) => (
-        <HumanitixRow
-          key={e.humanitixEventId}
-          event={e}
-          onChanged={() => {
-            void load();
-            onChanged();
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
-function HumanitixRow({ event, onChanged }: { event: HumanitixEventView; onChanged: () => void }) {
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-
-  async function download() {
-    setBusy(true);
-    setMsg(null);
-    const res = await downloadHumanitixCsv(event.humanitixEventId, event.name);
-    setBusy(false);
-    if (!res.ok) setMsg(res.message);
-    else {
-      setMsg('CSV downloaded — upload it to Humanitix Promote → Discounts.');
-      onChanged();
-    }
-  }
-
-  const dates = [fmtDate(event.startDate), fmtDate(event.endDate)].filter(Boolean).join(' – ');
-  return (
-    <div className="event-row">
-      <div>
-        <strong>{event.name}</strong>
-        <div className="muted small">
-          {dates && <>{dates} · </>}
-          {event.synced ? `${event.codeCount} codes generated` : 'not yet generated'}
-        </div>
-        {msg && <div className="muted small">{msg}</div>}
-      </div>
-      <button className="primary" onClick={download} disabled={busy}>
-        {busy ? 'Preparing…' : 'Download codes CSV'}
-      </button>
-    </div>
-  );
-}
-
-// ── Everything this app knows about ───────────────────────────────────────────
-
 // A passed event is retired server-side, so `active` is the live/finished split
 // here. Kept visible (not deleted) so the codes already issued stay auditable.
-function InternalEvents({ events }: { events: EventAdmin[] | null }) {
+function EventList({ events }: { events: EventAdmin[] | null }) {
   if (!events) return <p className="muted small">Loading events…</p>;
-  if (events.length === 0) return null;
 
   const live = events.filter((e) => e.active);
   const past = events.filter((e) => !e.active);
 
   return (
     <>
-      <h4>Verify links</h4>
       {live.length === 0 ? (
-        <p className="muted small">No live events yet — download a CSV above, or add one manually.</p>
+        <p className="muted small">No live events right now — add one manually below if it isn’t on Humanitix.</p>
       ) : (
         <div className="event-list">
           {live.map((e) => (
-            <InternalRow key={e.id} event={e} />
+            <EventRow key={e.id} event={e} />
           ))}
         </div>
       )}
@@ -173,7 +94,7 @@ function InternalEvents({ events }: { events: EventAdmin[] | null }) {
           </p>
           <div className="event-list">
             {past.map((e) => (
-              <InternalRow key={e.id} event={e} past />
+              <EventRow key={e.id} event={e} past />
             ))}
           </div>
         </details>
@@ -182,7 +103,7 @@ function InternalEvents({ events }: { events: EventAdmin[] | null }) {
   );
 }
 
-function InternalRow({ event, past = false }: { event: EventAdmin; past?: boolean }) {
+function EventRow({ event, past = false }: { event: EventAdmin; past?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   async function download() {
@@ -190,7 +111,7 @@ function InternalRow({ event, past = false }: { event: EventAdmin; past?: boolea
     setMsg(null);
     const res = await downloadCodesCsv(event.id, event.slug);
     setBusy(false);
-    setMsg(res.ok ? 'CSV downloaded.' : res.message);
+    setMsg(res.ok ? 'CSV downloaded — upload it to Humanitix Promote → Discounts.' : res.message);
   }
   const dates = [fmtDate(event.startDate), fmtDate(event.endDate)].filter(Boolean).join(' – ');
   return (
@@ -198,14 +119,13 @@ function InternalRow({ event, past = false }: { event: EventAdmin; past?: boolea
       <div>
         <strong>{event.name}</strong>
         <div className="muted small">
-          /e/{event.slug} · {dates ? `${dates} · ` : ''}
-          {event.codeCount} codes
+          {dates ? `${dates} · ` : ''}/e/{event.slug} · {event.codeCount} codes
           {event.humanitixEventId ? '' : ' · manual'}
         </div>
         {msg && <div className="muted small">{msg}</div>}
       </div>
       {!past && (
-        <button className="secondary" onClick={download} disabled={busy}>
+        <button className="primary" onClick={download} disabled={busy}>
           {busy ? 'Preparing…' : 'Download codes CSV'}
         </button>
       )}
