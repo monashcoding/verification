@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { fetchStatus, UnauthorizedError } from './api.js';
+import { fetchStatus, NotFoundError, UnauthorizedError } from './api.js';
 import type { StatusResponse } from './types.js';
 
 type State =
   | { phase: 'loading' }
   | { phase: 'unauthenticated' }
+  // The slug is retired, past, or unknown — the page explains which (§7).
+  | { phase: 'unavailable' }
   | { phase: 'ready'; data: StatusResponse }
   | { phase: 'error'; message: string };
 
@@ -18,6 +20,7 @@ export function useStatus(slug?: string) {
       setState({ phase: 'ready', data });
     } catch (err) {
       if (err instanceof UnauthorizedError) setState({ phase: 'unauthenticated' });
+      else if (err instanceof NotFoundError) setState({ phase: 'unavailable' });
       else setState({ phase: 'error', message: (err as Error).message });
     }
   }, [slug]);

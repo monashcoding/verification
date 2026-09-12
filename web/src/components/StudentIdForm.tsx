@@ -3,6 +3,9 @@ import { submitStudentId, type SubmitResult } from '../api.js';
 
 interface Props {
   slug?: string;
+  /** Plain Humanitix link, when we know it (event page). Renders the standard-
+   *  price escape hatch so a non-member never has to interact with the field. */
+  ticketUrl?: string;
   attemptsRemaining?: number;
   onResolved: (result: SubmitResult) => void;
   onSkip: () => void;
@@ -13,7 +16,7 @@ interface Props {
  * members won't email-match. Framed as a normal step. Skipping writes nothing.
  * Failure copy is generic — we never reveal which part of the check failed.
  */
-export function StudentIdForm({ slug, attemptsRemaining, onResolved, onSkip }: Props) {
+export function StudentIdForm({ slug, ticketUrl, attemptsRemaining, onResolved, onSkip }: Props) {
   const [value, setValue] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -68,6 +71,12 @@ export function StudentIdForm({ slug, attemptsRemaining, onResolved, onSkip }: P
           Skip — I’m not a member
         </button>
       </div>
+      {ticketUrl && (
+        <p className="muted small">
+          Not a MAC member?{' '}
+          <a href={ticketUrl}>Continue to tickets at the standard price.</a>
+        </p>
+      )}
     </form>
   );
 }

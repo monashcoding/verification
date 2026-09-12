@@ -45,6 +45,55 @@ function serializeEvent(event: Event, outcome: EventOutcome) {
   };
 }
 
+// GET /api/verify/events → the active-events list, no auth.
+//
+// Backs "browse without signing in" on the generic entry point: someone who
+// isn't a member (or doesn't want to hand over an account yet) can still see
+// what's on and go buy a normal ticket. Same shape as the signed-in list, with
+// every outcome fixed at not_member since there's nobody to resolve.
+verifyRouter.get('/events', async (_req, res) => {
+  const events = await getActiveEvents();
+  res.json({
+    mode: 'public',
+    events: events.map((e) =>
+      serializeEvent(e, { state: 'not_member', ticketUrl: e.humanitixEventUrl }),
+    ),
+  });
+});
+
+// GET /api/verify/event/:slug → public event card, no auth.
+//
+// The signed-out visitor is the one case where the gate could dead-end someone:
+// /e/{slug} is what marketing posts publicly, and a non-member has no reason to
+// hand over a Google account just to reach a ticket they could always buy. This
+// returns only what the Humanitix page already shows anyone, plus the plain
+// ticket link — no roster, membership, or link state is involved (§7 "no dead
+// end, no error tone").
+//
+// A slug that exists but is no longer served (retired by the daily cron, or
+// simply past) answers 200 `mode: 'ended'` rather than 404: marketing links
+// outlive the event, and "this one has finished" is a better landing than a
+// generic error. Only a slug we've never heard of is a 404.
+verifyRouter.get('/event/:slug', async (req, res) => {
+  const event = await getEventBySlug(req.params.slug);
+  if (!event) {
+    const past = await getEventBySlug(req.params.slug, false);
+    if (past) {
+      res.json({
+        mode: 'ended',
+        event: { slug: past.slug, name: past.name, endDate: (past.endDate ?? past.startDate)?.toISOString() ?? null },
+      });
+      return;
+    }
+    res.status(404).json({ error: 'unknown_event' });
+    return;
+  }
+  res.json({
+    mode: 'public',
+    event: serializeEvent(event, { state: 'not_member', ticketUrl: event.humanitixEventUrl }),
+  });
+});
+
 // GET /api/verify/status         → generic entry point (§7): list active events.
 // GET /api/verify/status/:slug   → event-specific entry point (§7): one event.
 verifyRouter.get('/status/:slug?', requireAuth, async (req, res) => {

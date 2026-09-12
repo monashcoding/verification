@@ -33,6 +33,26 @@ export interface GenericStatusResponse {
   events: EventView[];
 }
 
+/** Signed-out view of one event (§7): the card plus the plain ticket link. */
+export interface PublicEventResponse {
+  mode: 'public';
+  event: EventView;
+}
+
+/** A slug we know but no longer serve — retired or simply past. */
+export interface EndedEventResponse {
+  mode: 'ended';
+  event: { slug: string; name: string; endDate: string | null };
+}
+
+export type PublicEventLookup = PublicEventResponse | EndedEventResponse;
+
+/** Signed-out view of the whole active-events list (the "browse" path). */
+export interface PublicEventsResponse {
+  mode: 'public';
+  events: EventView[];
+}
+
 export type StatusResponse = EventStatusResponse | GenericStatusResponse;
 
 export interface StudentIdRetryResponse {

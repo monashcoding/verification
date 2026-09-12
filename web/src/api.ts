@@ -1,7 +1,15 @@
 import { ensureToken, fetchToken } from './auth.js';
-import type { EventAdmin, RosterSummary, StatusResponse, StudentIdRetryResponse } from './types.js';
+import type {
+  EventAdmin,
+  PublicEventLookup,
+  PublicEventsResponse,
+  RosterSummary,
+  StatusResponse,
+  StudentIdRetryResponse,
+} from './types.js';
 
 export class UnauthorizedError extends Error {}
+export class NotFoundError extends Error {}
 export class ForbiddenError extends Error {}
 
 /**
@@ -41,6 +49,26 @@ async function safeJson(res: Response): Promise<Record<string, unknown>> {
 /** GET the resolution status. Pass a slug for the event-specific entry point. */
 export async function fetchStatus(slug?: string): Promise<StatusResponse> {
   const res = await apiFetch(`/api/verify/status${slug ? `/${encodeURIComponent(slug)}` : ''}`);
+  // The slug isn't served any more (or never was) — the caller explains which.
+  if (res.status === 404) throw new NotFoundError('unknown event');
+  if (!res.ok) throw new Error(`status ${res.status}`);
+  return res.json();
+}
+
+/**
+ * GET the public event card — no token, no membership lookup. Used for the
+ * signed-out visitor so a non-member can reach tickets without signing in.
+ */
+export async function fetchPublicEvent(slug: string): Promise<PublicEventLookup> {
+  const res = await fetch(`/api/verify/event/${encodeURIComponent(slug)}`);
+  if (res.status === 404) throw new NotFoundError('unknown event');
+  if (!res.ok) throw new Error(`status ${res.status}`);
+  return res.json();
+}
+
+/** GET the active-events list with no token — the "browse without signing in" path. */
+export async function fetchPublicEvents(): Promise<PublicEventsResponse> {
+  const res = await fetch('/api/verify/events');
   if (!res.ok) throw new Error(`status ${res.status}`);
   return res.json();
 }
