@@ -56,6 +56,10 @@ export const events = pgTable('events', {
   venueName: text('venue_name'),
   startDate: timestamp('start_date', { withTimezone: true }),
   endDate: timestamp('end_date', { withTimezone: true }),
+  // Set when an officer undoes a CSV download (codes weren't actually uploaded).
+  // Held events keep handing out the plain ticket link and are skipped by the
+  // automatic export, until someone downloads the CSV again.
+  codesOnHold: boolean('codes_on_hold').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

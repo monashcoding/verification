@@ -394,6 +394,7 @@ code {
 }
 .event-row:hover { border-color: var(--border); background: var(--card-hover); }
 .event-row strong { font-weight: 700; }
+.event-row-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: flex-end; flex-shrink: 0; }
 .card h4 {
   margin: 1.75rem 0 0;
   font-size: 0.8rem;

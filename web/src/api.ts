@@ -192,6 +192,14 @@ async function triggerCsvDownload(res: Response, slug: string): Promise<{ ok: tr
   return { ok: true };
 }
 
+/** Undo an accidental CSV download for an event (codes weren't uploaded). */
+export async function revertCodesExport(eventId: number): Promise<{ ok: true } | { ok: false; message: string }> {
+  const res = await apiFetch(`/api/admin/events/${eventId}/codes/revert-export`, { method: 'POST' });
+  if (res.status === 403) return { ok: false, message: 'This account can’t change events.' };
+  if (!res.ok) return { ok: false, message: `Undo failed (${res.status})` };
+  return { ok: true };
+}
+
 /** Download the Humanitix discount CSV for an internal event. */
 export async function downloadCodesCsv(eventId: number, slug: string) {
   try {

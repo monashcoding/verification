@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { fetchEvents, createEvent, downloadCodesCsv, type CreateEventInput, type EventsSyncStatus } from '../api.js';
+import { fetchEvents, createEvent, downloadCodesCsv, revertCodesExport, type CreateEventInput, type EventsSyncStatus } from '../api.js';
 import type { EventAdmin } from '../types.js';
 
 // Events admin (§8) + code CSV download (§9).
@@ -32,7 +32,7 @@ export function EventsAdmin() {
         event’s <em>Promote → Discounts → CSV upload</em> in Humanitix.
       </p>
       {state && <SyncNotice sync={state.sync} />}
-      <EventList events={state?.events ?? null} />
+      <EventList events={state?.events ?? null} onChanged={load} />
       <ManualEvents onCreated={load} />
     </div>
   );
@@ -68,7 +68,7 @@ function fmtDate(iso: string | null): string {
 
 // A passed event is retired server-side, so `active` is the live/finished split
 // here. Kept visible (not deleted) so the codes already issued stay auditable.
-function EventList({ events }: { events: EventAdmin[] | null }) {
+function EventList({ events, onChanged }: { events: EventAdmin[] | null; onChanged: () => void }) {
   if (!events) return <p className="muted small">Loading events…</p>;
 
   const live = events.filter((e) => e.active);
@@ -81,7 +81,7 @@ function EventList({ events }: { events: EventAdmin[] | null }) {
       ) : (
         <div className="event-list">
           {live.map((e) => (
-            <EventRow key={e.id} event={e} />
+            <EventRow key={e.id} event={e} onChanged={onChanged} />
           ))}
         </div>
       )}
@@ -94,7 +94,7 @@ function EventList({ events }: { events: EventAdmin[] | null }) {
           </p>
           <div className="event-list">
             {past.map((e) => (
-              <EventRow key={e.id} event={e} past />
+              <EventRow key={e.id} event={e} onChanged={onChanged} past />
             ))}
           </div>
         </details>
@@ -103,7 +103,7 @@ function EventList({ events }: { events: EventAdmin[] | null }) {
   );
 }
 
-function EventRow({ event, past = false }: { event: EventAdmin; past?: boolean }) {
+function EventRow({ event, onChanged, past = false }: { event: EventAdmin; onChanged: () => void; past?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   async function download() {
@@ -112,6 +112,16 @@ function EventRow({ event, past = false }: { event: EventAdmin; past?: boolean }
     const res = await downloadCodesCsv(event.id, event.slug);
     setBusy(false);
     setMsg(res.ok ? 'CSV downloaded — upload it to Humanitix Promote → Discounts.' : res.message);
+    if (res.ok) onChanged();
+  }
+  async function undo() {
+    if (!window.confirm(`Mark ${event.name}'s codes as not uploaded? Members will get the normal ticket link until you download the CSV again.`)) return;
+    setBusy(true);
+    setMsg(null);
+    const res = await revertCodesExport(event.id);
+    setBusy(false);
+    setMsg(res.ok ? 'Undone — members get the normal ticket link for this event.' : res.message);
+    if (res.ok) onChanged();
   }
   const dates = [fmtDate(event.startDate), fmtDate(event.endDate)].filter(Boolean).join(' – ');
   return (
@@ -121,13 +131,21 @@ function EventRow({ event, past = false }: { event: EventAdmin; past?: boolean }
         <div className="muted small">
           {dates ? `${dates} · ` : ''}/e/{event.slug} · {event.codeCount} codes
           {event.humanitixEventId ? '' : ' · manual'}
+          {event.codesOnHold ? ' · not uploaded (on hold)' : event.exportedCount > 0 ? ' · sent out' : ''}
         </div>
         {msg && <div className="muted small">{msg}</div>}
       </div>
       {!past && (
-        <button className="primary" onClick={download} disabled={busy}>
-          {busy ? 'Preparing…' : 'Download codes CSV'}
-        </button>
+        <div className="event-row-actions">
+          <button className="primary" onClick={download} disabled={busy}>
+            {busy ? 'Working…' : 'Download codes CSV'}
+          </button>
+          {event.exportedCount > 0 && (
+            <button className="secondary" onClick={undo} disabled={busy} title="Use this if the CSV was downloaded but never uploaded to Humanitix">
+              Undo download
+            </button>
+          )}
+        </div>
       )}
     </div>
   );

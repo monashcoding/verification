@@ -1,0 +1,1 @@
+ALTER TABLE "events" ADD COLUMN "codes_on_hold" boolean DEFAULT false NOT NULL;

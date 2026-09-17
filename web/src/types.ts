@@ -81,4 +81,8 @@ export interface EventAdmin {
   endDate: string | null;
   createdAt: string;
   codeCount: number;
+  /** Codes marked as sent out (downloaded or posted to Discord). */
+  exportedCount: number;
+  /** An officer undid the download — no discount links, no auto-export. */
+  codesOnHold: boolean;
 }

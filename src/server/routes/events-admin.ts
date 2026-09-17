@@ -7,7 +7,7 @@ import { requireAdmin } from '../auth/mac-auth.js';
 import { onEventPublished } from '../codes/cron.js';
 import { deactivatePastEvents } from '../events/retire.js';
 import { syncLiveEvents } from '../events/sync.js';
-import { provisionEventCodes, buildEventCsv, markExported } from '../codes/provision.js';
+import { provisionEventCodes, buildEventCsv, markExported, revertEventExport } from '../codes/provision.js';
 
 export const eventsAdminRouter = Router();
 
@@ -65,7 +65,9 @@ eventsAdminRouter.get('/', requireAdmin, async (_req, res) => {
       startDate: events.startDate,
       endDate: events.endDate,
       createdAt: events.createdAt,
+      codesOnHold: events.codesOnHold,
       codeCount: sql<number>`count(${memberEventCodes.id})::int`,
+      exportedCount: sql<number>`count(${memberEventCodes.exportedAt})::int`,
     })
     .from(events)
     .leftJoin(memberEventCodes, eq(memberEventCodes.eventId, events.id))
@@ -96,10 +98,32 @@ eventsAdminRouter.get('/:id/codes.csv', requireAdmin, async (req, res) => {
     return;
   }
   await markExported(unexportedIds);
+  // Downloading again is the officer saying "these are going up now" — lift any hold.
+  if (event.codesOnHold) await db.update(events).set({ codesOnHold: false }).where(eq(events.id, id));
 
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="codes-${event.slug}.csv"`);
   res.send(csv);
+});
+
+// POST /api/admin/events/:id/codes/revert-export — undo an accidental CSV
+// download. Members go back to the plain ticket link for this event, and the
+// event stays out of the automatic export until the CSV is downloaded again.
+// Codes themselves are kept (never hard-deleted), and so is each member's code
+// value, so a later download reproduces the same CSV.
+eventsAdminRouter.post('/:id/codes/revert-export', requireAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ error: 'invalid_id' });
+    return;
+  }
+  const [event] = await db.select({ id: events.id }).from(events).where(eq(events.id, id));
+  if (!event) {
+    res.status(404).json({ error: 'not_found' });
+    return;
+  }
+  const reverted = await revertEventExport(id, req.macUser?.macUserId ?? null);
+  res.json({ reverted });
 });
 
 // POST /api/admin/events

@@ -20,6 +20,8 @@ export function shouldExport(count: number, oldestGeneratedAt: Date | null, now 
 }
 
 async function exportAndNotify(event: Event, notifier: Notifier): Promise<number> {
+  // An officer said these codes aren't on Humanitix — don't re-mark them behind their back.
+  if (event.codesOnHold) return 0;
   const batch = await buildPendingBatch(event.id);
   if (batch.count === 0) return 0;
   await notifier.notifyBatch({

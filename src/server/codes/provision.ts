@@ -1,6 +1,6 @@
 import { and, eq, isNull, sql, asc, inArray } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { roster, memberEventCodes, auditLog } from '../db/schema.js';
+import { roster, events, memberEventCodes, auditLog } from '../db/schema.js';
 import { latestImportBatchId } from '../roster/query.js';
 import { generateCode } from './generate.js';
 
@@ -123,6 +123,26 @@ export async function buildPendingBatch(eventId: number): Promise<PendingBatch> 
     csv: rowsToCsv(rows),
     oldestGeneratedAt: rows[0]?.generatedAt ?? null,
   };
+}
+
+/**
+ * Undo an export for a whole event — for a CSV that was downloaded but never
+ * uploaded. Clears exported_at (so members get the plain ticket link again) and
+ * puts the event on hold so the daily cron doesn't just re-export it.
+ */
+export async function revertEventExport(eventId: number, actorMacUserId: string | null): Promise<number> {
+  const reverted = await db
+    .update(memberEventCodes)
+    .set({ exportedAt: null })
+    .where(and(eq(memberEventCodes.eventId, eventId), sql`${memberEventCodes.exportedAt} is not null`))
+    .returning({ id: memberEventCodes.id });
+  await db.update(events).set({ codesOnHold: true }).where(eq(events.id, eventId));
+  await db.insert(auditLog).values({
+    actorMacUserId,
+    action: 'codes_export_reverted',
+    detail: { eventId, count: reverted.length },
+  });
+  return reverted.length;
 }
 
 /** Mark a set of codes as exported (optimistic — §9: no upload confirmation). */

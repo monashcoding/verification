@@ -22,6 +22,13 @@
       "when": 1784470991529,
       "tag": "0002_parched_roland_deschain",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789627835328,
+      "tag": "0003_flashy_morbius",
+      "breakpoints": true
     }
   ]
 }
