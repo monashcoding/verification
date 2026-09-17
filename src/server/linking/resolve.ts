@@ -20,9 +20,9 @@ export type LinkState =
 export type EventOutcome =
   // Linked and a code exists for this event → the auto-apply link (§8).
   | { state: 'code_ready'; autoApplyUrl: string }
-  // Linked but no code provisioned for this event yet → "being set up" (§7).
-  | { state: 'pending' }
-  // Not linked (skipped / exhausted / genuinely not a member) → plain link.
+  // Not linked (skipped / exhausted / genuinely not a member), or linked but no
+  // code has gone out for this event → plain link. Events without codes are
+  // deliberate (no member pricing), so there's nothing to wait for.
   | { state: 'not_member'; ticketUrl: string };
 
 async function findLink(macUserId: string): Promise<{ rosterId: number } | null> {
@@ -106,10 +106,12 @@ export async function resolveEventOutcome(linkState: LinkState, event: Event): P
   }
 
   const [code] = await db
-    .select({ code: memberEventCodes.code })
+    .select({ code: memberEventCodes.code, exportedAt: memberEventCodes.exportedAt })
     .from(memberEventCodes)
     .where(and(eq(memberEventCodes.rosterId, linkState.rosterId), eq(memberEventCodes.eventId, event.id)));
 
-  if (!code) return { state: 'pending' };
+  // Unexported codes were never handed to an officer to upload, so a discount
+  // link would fail at checkout — send them to the normal tickets instead.
+  if (!code || !code.exportedAt) return { state: 'not_member', ticketUrl: event.humanitixEventUrl };
   return { state: 'code_ready', autoApplyUrl: composeAutoApplyUrl(event.humanitixEventUrl, code.code) };
 }

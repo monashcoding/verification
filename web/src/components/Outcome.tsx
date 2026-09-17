@@ -58,12 +58,6 @@ export function OutcomeCard({ event, previewOnly = false }: { event: EventView; 
               Get tickets with your member discount
             </a>
           )}
-          {outcome.state === 'pending' && (
-            <p className="muted small event-card-note">
-              You’re confirmed as a member — your code for this event is being set up. Check back
-              soon.
-            </p>
-          )}
           {outcome.state === 'not_member' && (
             <a className="secondary as-button block" href={outcome.ticketUrl}>
               Continue to tickets
@@ -77,10 +71,8 @@ export function OutcomeCard({ event, previewOnly = false }: { event: EventView; 
 }
 
 function StatusTag({ state }: { state: EventView['outcome']['state'] }) {
-  if (state === 'not_member') return null;
-  const cls = state === 'code_ready' ? 'verified' : 'pending';
-  const label = state === 'code_ready' ? 'Member price' : 'Verified';
-  return <span className={`event-tag ${cls}`}>{label}</span>;
+  if (state !== 'code_ready') return null;
+  return <span className="event-tag verified">Member price</span>;
 }
 
 // Matches the reference's en-AU / Melbourne formatting.

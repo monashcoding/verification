@@ -7,7 +7,6 @@ export interface LinkStatus {
 
 export type EventOutcome =
   | { state: 'code_ready'; autoApplyUrl: string }
-  | { state: 'pending' }
   | { state: 'not_member'; ticketUrl: string };
 
 export interface EventView {
