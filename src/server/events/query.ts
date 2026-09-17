@@ -1,4 +1,4 @@
-import { eq, and, asc } from 'drizzle-orm';
+import { eq, and, desc, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { events, type Event } from '../db/schema.js';
 import { notPassedSql } from './retire.js';
@@ -12,7 +12,9 @@ export async function getActiveEvents(): Promise<Event[]> {
     .select()
     .from(events)
     .where(and(eq(events.active, true), notPassedSql()))
-    .orderBy(asc(events.name));
+    // Newest first, same order as the admin list — manual events without a
+    // date fall back to when they were added.
+    .orderBy(desc(sql`coalesce(${events.startDate}, ${events.createdAt})`), desc(events.createdAt));
 }
 
 export async function getEventBySlug(slug: string, activeOnly = true): Promise<Event | null> {
