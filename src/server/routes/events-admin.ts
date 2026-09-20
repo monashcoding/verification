@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { events, memberEventCodes, auditLog } from '../db/schema.js';
 import { requireAdmin } from '../auth/mac-auth.js';
@@ -50,6 +50,10 @@ async function fireTriggerA(eventId: number): Promise<{ provisioned: number; exp
 //
 // The `sync` block tells the panel whether the Humanitix pull actually happened,
 // so a missing event reads as "sync is off/broken" rather than "no such event".
+//
+// Removed events come back too, carrying `deletedAt` — the panel tucks them into
+// their own collapsed section so a mistaken removal can be undone. Nothing else
+// in the app reads them (see `notDeleted` in events/query.ts).
 eventsAdminRouter.get('/', requireAdmin, async (_req, res) => {
   const sync = await syncLiveEvents();
   if (sync.error) console.error('[events-admin] humanitix sync failed', sync.error);
@@ -66,6 +70,7 @@ eventsAdminRouter.get('/', requireAdmin, async (_req, res) => {
       endDate: events.endDate,
       createdAt: events.createdAt,
       codesOnHold: events.codesOnHold,
+      deletedAt: events.deletedAt,
       codeCount: sql<number>`count(${memberEventCodes.id})::int`,
       exportedCount: sql<number>`count(${memberEventCodes.exportedAt})::int`,
     })
@@ -85,7 +90,10 @@ eventsAdminRouter.get('/:id/codes.csv', requireAdmin, async (req, res) => {
     res.status(400).json({ error: 'invalid_id' });
     return;
   }
-  const [event] = await db.select().from(events).where(eq(events.id, id));
+  const [event] = await db
+    .select()
+    .from(events)
+    .where(and(eq(events.id, id), isNull(events.deletedAt)));
   if (!event) {
     res.status(404).json({ error: 'not_found' });
     return;
@@ -144,7 +152,14 @@ eventsAdminRouter.post('/', requireAdmin, async (req, res) => {
     res.status(201).json({ event: created, provisioning });
   } catch (err) {
     if ((err as { code?: string }).code === '23505') {
-      res.status(409).json({ error: 'slug_taken' });
+      // A removed event keeps its slug, so "that slug is taken" can point at a
+      // row the officer can no longer see. Say which it is — restoring beats
+      // inventing a second slug for the same event.
+      const [removed] = await db
+        .select({ id: events.id })
+        .from(events)
+        .where(and(eq(events.slug, parsed.data.slug), sql`${events.deletedAt} is not null`));
+      res.status(409).json({ error: 'slug_taken', removedEventId: removed?.id ?? null });
       return;
     }
     throw err;
@@ -182,4 +197,73 @@ eventsAdminRouter.patch('/:id', requireAdmin, async (req, res) => {
     }
     throw err;
   }
+});
+
+// DELETE /api/admin/events/:id — remove an event from the admin list.
+//
+// Soft: the row is kept and so are its codes (CLAUDE.md — nothing about a
+// member's history gets hard-deleted, and a code may already be live on
+// Humanitix). Removing hides the event everywhere — the admin list, the verify
+// pages, and code provisioning — and, crucially, survives the Humanitix sync: a
+// removed event that is still live on Humanitix would otherwise reappear on the
+// next page load.
+//
+// This is the "wrong event / duplicate / we're not doing member pricing for this
+// one" button, not a retirement one — past events retire themselves.
+eventsAdminRouter.delete('/:id', requireAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ error: 'invalid_id' });
+    return;
+  }
+  const [event] = await db
+    .select({ id: events.id, slug: events.slug })
+    .from(events)
+    .where(and(eq(events.id, id), isNull(events.deletedAt)));
+  if (!event) {
+    res.status(404).json({ error: 'not_found' });
+    return;
+  }
+
+  // active:false as well, so anything reading the flag directly (rather than
+  // going through getActiveEvents) can't hand out a link for a removed event.
+  const [updated] = await db
+    .update(events)
+    .set({ deletedAt: new Date(), active: false })
+    .where(eq(events.id, id))
+    .returning();
+  await db.insert(auditLog).values({
+    actorMacUserId: req.macUser?.macUserId ?? null,
+    action: 'event_removed',
+    detail: { eventId: id, slug: event.slug },
+  });
+  res.json({ event: updated });
+});
+
+// POST /api/admin/events/:id/restore — undo a removal.
+//
+// Comes back inactive whatever it was before: reactivating is the thing that
+// fires code provisioning, so an officer says that separately and on purpose.
+// A restored event that is still live on Humanitix is picked up by the next sync.
+eventsAdminRouter.post('/:id/restore', requireAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ error: 'invalid_id' });
+    return;
+  }
+  const [updated] = await db
+    .update(events)
+    .set({ deletedAt: null })
+    .where(eq(events.id, id))
+    .returning();
+  if (!updated) {
+    res.status(404).json({ error: 'not_found' });
+    return;
+  }
+  await db.insert(auditLog).values({
+    actorMacUserId: req.macUser?.macUserId ?? null,
+    action: 'event_restored',
+    detail: { eventId: id, slug: updated.slug },
+  });
+  res.json({ event: updated });
 });

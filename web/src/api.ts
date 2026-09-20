@@ -157,7 +157,9 @@ export interface CreateEventInput {
 
 export type CreateEventOutcome =
   | { kind: 'ok'; event: EventAdmin }
-  | { kind: 'slug_taken' }
+  // `removed` when the slug is held by an event someone removed — the officer
+  // can't see it in the list, so the message has to mention it.
+  | { kind: 'slug_taken'; removed: boolean }
   | { kind: 'invalid' }
   | { kind: 'forbidden' }
   | { kind: 'error'; message: string };
@@ -165,7 +167,7 @@ export type CreateEventOutcome =
 export async function createEvent(input: CreateEventInput): Promise<CreateEventOutcome> {
   const res = await apiFetch('/api/admin/events', { method: 'POST', body: JSON.stringify(input) });
   if (res.status === 403) return { kind: 'forbidden' };
-  if (res.status === 409) return { kind: 'slug_taken' };
+  if (res.status === 409) return { kind: 'slug_taken', removed: (await safeJson(res)).removedEventId != null };
   if (res.status === 400) return { kind: 'invalid' };
   if (!res.ok) return { kind: 'error', message: `Failed (${res.status})` };
   return { kind: 'ok', event: (await res.json()).event };
@@ -197,6 +199,26 @@ export async function revertCodesExport(eventId: number): Promise<{ ok: true } |
   const res = await apiFetch(`/api/admin/events/${eventId}/codes/revert-export`, { method: 'POST' });
   if (res.status === 403) return { ok: false, message: 'This account can’t change events.' };
   if (!res.ok) return { ok: false, message: `Undo failed (${res.status})` };
+  return { ok: true };
+}
+
+/**
+ * Remove an event from the admin list. Soft server-side: codes and audit trail
+ * stay, and the event can be restored.
+ */
+export async function deleteEvent(eventId: number): Promise<{ ok: true } | { ok: false; message: string }> {
+  const res = await apiFetch(`/api/admin/events/${eventId}`, { method: 'DELETE' });
+  if (res.status === 403) return { ok: false, message: 'This account can\u2019t change events.' };
+  if (res.status === 404) return { ok: false, message: 'That event is already gone — refresh the page.' };
+  if (!res.ok) return { ok: false, message: `Remove failed (${res.status})` };
+  return { ok: true };
+}
+
+/** Undo a removal. Comes back inactive — activating is a separate, deliberate step. */
+export async function restoreEvent(eventId: number): Promise<{ ok: true } | { ok: false; message: string }> {
+  const res = await apiFetch(`/api/admin/events/${eventId}/restore`, { method: 'POST' });
+  if (res.status === 403) return { ok: false, message: 'This account can\u2019t change events.' };
+  if (!res.ok) return { ok: false, message: `Restore failed (${res.status})` };
   return { ok: true };
 }
 

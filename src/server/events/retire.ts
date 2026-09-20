@@ -1,4 +1,4 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { events, auditLog, type Event } from '../db/schema.js';
 
@@ -29,7 +29,7 @@ export async function deactivatePastEvents(now = new Date()): Promise<Event[]> {
   const retired = await db
     .update(events)
     .set({ active: false })
-    .where(and(eq(events.active, true), sql`not (${notPassedSql(now)})`))
+    .where(and(isNull(events.deletedAt), eq(events.active, true), sql`not (${notPassedSql(now)})`))
     .returning();
 
   if (retired.length > 0) {

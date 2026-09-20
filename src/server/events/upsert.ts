@@ -37,6 +37,10 @@ function definedPreviewFields(hx: HumanitixEvent) {
 export async function upsertFromHumanitix(hx: HumanitixEvent): Promise<Event> {
   const [existing] = await db.select().from(events).where(eq(events.humanitixEventId, hx.id));
   if (existing) {
+    // An officer removed this one. Being live on Humanitix is exactly why it
+    // keeps coming back in the list, so leave it alone entirely — refreshing its
+    // preview would be work on a row nothing renders.
+    if (existing.deletedAt) return existing;
     const fields = definedPreviewFields(hx);
     if (Object.keys(fields).length === 0) return existing;
     const [updated] = await db

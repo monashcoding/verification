@@ -85,4 +85,6 @@ export interface EventAdmin {
   exportedCount: number;
   /** An officer undid the download — no discount links, no auto-export. */
   codesOnHold: boolean;
+  /** An officer removed the event: hidden everywhere but the removed section. */
+  deletedAt: string | null;
 }

@@ -183,6 +183,9 @@ button:active, .as-button:active { transform: translateY(1px); }
   border: 1px solid var(--border);
 }
 .secondary:hover { border-color: var(--muted); background: var(--card-hover); }
+/* Destructive-looking only on hover — it sits next to the everyday buttons and
+   shouldn't shout from the row. */
+.secondary.danger:hover { border-color: var(--danger); color: var(--danger); }
 .link-button {
   background: none;
   color: var(--muted);

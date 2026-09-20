@@ -60,6 +60,11 @@ export const events = pgTable('events', {
   // Held events keep handing out the plain ticket link and are skipped by the
   // automatic export, until someone downloads the CSV again.
   codesOnHold: boolean('codes_on_hold').notNull().default(false),
+  // Set when an officer removes the event from the admin list. A soft delete:
+  // the row stays (codes reference it, and the audit trail has to remain
+  // readable) but it is hidden everywhere — admin list, verify pages, code
+  // provisioning — and the Humanitix sync will not resurrect it.
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

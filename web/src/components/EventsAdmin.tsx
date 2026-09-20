@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
-import { fetchEvents, createEvent, downloadCodesCsv, revertCodesExport, type CreateEventInput, type EventsSyncStatus } from '../api.js';
+import {
+  fetchEvents,
+  createEvent,
+  downloadCodesCsv,
+  revertCodesExport,
+  deleteEvent,
+  restoreEvent,
+  type CreateEventInput,
+  type EventsSyncStatus,
+} from '../api.js';
 import type { EventAdmin } from '../types.js';
 
 // Events admin (§8) + code CSV download (§9).
@@ -8,7 +17,9 @@ import type { EventAdmin } from '../types.js';
 // events table on every load, so a live event and its verify link are the same
 // row. Manual entry stays as a fallback (no API key, or an event that isn't on
 // Humanitix). Events whose date has passed are retired automatically (server
-// side) and tucked into a collapsed section.
+// side) and tucked into a collapsed section. Removing one is a soft delete: it
+// moves to its own collapsed section and can be restored, because a live
+// Humanitix event would otherwise just reappear on the next sync.
 export function EventsAdmin() {
   const [state, setState] = useState<{ sync: EventsSyncStatus; events: EventAdmin[] } | null>(null);
 
@@ -71,8 +82,11 @@ function fmtDate(iso: string | null): string {
 function EventList({ events, onChanged }: { events: EventAdmin[] | null; onChanged: () => void }) {
   if (!events) return <p className="muted small">Loading events…</p>;
 
-  const live = events.filter((e) => e.active);
-  const past = events.filter((e) => !e.active);
+  // Removed first — a removed event is removed whether or not its date passed.
+  const removed = events.filter((e) => e.deletedAt);
+  const listed = events.filter((e) => !e.deletedAt);
+  const live = listed.filter((e) => e.active);
+  const past = listed.filter((e) => !e.active);
 
   return (
     <>
@@ -99,6 +113,21 @@ function EventList({ events, onChanged }: { events: EventAdmin[] | null; onChang
           </div>
         </details>
       )}
+      {removed.length > 0 && (
+        <details className="past-events">
+          <summary>{removed.length} removed {removed.length === 1 ? 'event' : 'events'}</summary>
+          <p className="muted small">
+            Hidden from the verify pages and from code provisioning. Their codes are kept, so
+            restoring one brings it back exactly as it was — inactive until you download its CSV
+            again.
+          </p>
+          <div className="event-list">
+            {removed.map((e) => (
+              <EventRow key={e.id} event={e} onChanged={onChanged} />
+            ))}
+          </div>
+        </details>
+      )}
     </>
   );
 }
@@ -113,6 +142,28 @@ function EventRow({ event, onChanged, past = false }: { event: EventAdmin; onCha
     setBusy(false);
     setMsg(res.ok ? 'CSV downloaded — upload it to Humanitix Promote → Discounts.' : res.message);
     if (res.ok) onChanged();
+  }
+  async function remove() {
+    if (
+      !window.confirm(
+        `Remove ${event.name} from this list? Its verify link stops working and no more codes are generated. Codes already issued are kept, and you can restore it.`,
+      )
+    )
+      return;
+    setBusy(true);
+    setMsg(null);
+    const res = await deleteEvent(event.id);
+    setBusy(false);
+    if (res.ok) onChanged();
+    else setMsg(res.message);
+  }
+  async function restore() {
+    setBusy(true);
+    setMsg(null);
+    const res = await restoreEvent(event.id);
+    setBusy(false);
+    if (res.ok) onChanged();
+    else setMsg(res.message);
   }
   async function undo() {
     if (!window.confirm(`Mark ${event.name}'s codes as not uploaded? Members will get the normal ticket link until you download the CSV again.`)) return;
@@ -132,19 +183,38 @@ function EventRow({ event, onChanged, past = false }: { event: EventAdmin; onCha
           {dates ? `${dates} · ` : ''}/e/{event.slug} · {event.codeCount} codes
           {event.humanitixEventId ? '' : ' · manual'}
           {event.codesOnHold ? ' · not uploaded (on hold)' : event.exportedCount > 0 ? ' · sent out' : ''}
+          {event.deletedAt ? ' · removed' : ''}
         </div>
         {msg && <div className="muted small">{msg}</div>}
       </div>
-      {!past && (
+      {event.deletedAt ? (
         <div className="event-row-actions">
-          <button className="primary" onClick={download} disabled={busy}>
-            {busy ? 'Working…' : 'Download codes CSV'}
+          <button className="secondary" onClick={restore} disabled={busy}>
+            {busy ? 'Working…' : 'Restore'}
           </button>
-          {event.exportedCount > 0 && (
-            <button className="secondary" onClick={undo} disabled={busy} title="Use this if the CSV was downloaded but never uploaded to Humanitix">
-              Undo download
-            </button>
+        </div>
+      ) : (
+        <div className="event-row-actions">
+          {!past && (
+            <>
+              <button className="primary" onClick={download} disabled={busy}>
+                {busy ? 'Working…' : 'Download codes CSV'}
+              </button>
+              {event.exportedCount > 0 && (
+                <button className="secondary" onClick={undo} disabled={busy} title="Use this if the CSV was downloaded but never uploaded to Humanitix">
+                  Undo download
+                </button>
+              )}
+            </>
           )}
+          <button
+            className="secondary danger"
+            onClick={remove}
+            disabled={busy}
+            title="Hide this event from the verify pages. Codes are kept and it can be restored."
+          >
+            Remove
+          </button>
         </div>
       )}
     </div>
@@ -188,7 +258,12 @@ function CreateEventForm({ onCreated }: { onCreated: () => void }) {
       setForm({ name: '', slug: '', humanitixEventUrl: '', active: true });
       setSlugTouched(false);
       onCreated();
-    } else if (res.kind === 'slug_taken') setError('That slug is already used by another event.');
+    } else if (res.kind === 'slug_taken')
+      setError(
+        res.removed
+          ? 'That slug belongs to a removed event — restore it below instead of creating a duplicate.'
+          : 'That slug is already used by another event.',
+      );
     else if (res.kind === 'invalid') setError('Check the fields — slug must be kebab-case and the URL valid.');
     else if (res.kind === 'forbidden') setError('This account can’t create events.');
     else setError(res.message);
