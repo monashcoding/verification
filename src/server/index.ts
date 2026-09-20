@@ -1,3 +1,5 @@
+// First import: populates process.env from .env before any module reads it.
+import './env.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 // Must be imported before the routers: patches Express 4 so errors thrown from

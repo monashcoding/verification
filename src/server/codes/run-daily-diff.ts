@@ -1,3 +1,5 @@
+// First import: populates process.env from .env before any module reads it.
+import '../env.js';
 import { runDailyDiff } from './cron.js';
 
 // Entry point for the daily-diff cron (§9 Trigger B). Wire this to a scheduled

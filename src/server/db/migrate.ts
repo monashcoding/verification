@@ -1,3 +1,5 @@
+// First import: populates process.env from .env before DATABASE_URL is read.
+import '../env.js';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
