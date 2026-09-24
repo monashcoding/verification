@@ -39,8 +39,8 @@ export function EventsAdmin() {
     <div className="card">
       <h3>Events</h3>
       <p className="muted">
-        Live events pull automatically from Humanitix. Download an event’s CSV and upload it to that
-        event’s <em>Promote → Discounts → CSV upload</em> in Humanitix.
+        Live events pull automatically from Humanitix. Download an event’s CSV, then <em>Open in
+        Humanitix</em> to upload it on that event’s <em>Promote → Discounts → CSV upload</em> page.
       </p>
       {state && <SyncNotice sync={state.sync} />}
       <EventList events={state?.events ?? null} onChanged={load} />
@@ -69,6 +69,14 @@ function SyncNotice({ sync }: { sync: EventsSyncStatus }) {
     );
   }
   return null;
+}
+
+// Deep link to an event's discount-code page in the Humanitix console, so the
+// manual upload starts on the right screen instead of hunting through the event
+// list. A plain hyperlink — we don't drive the dashboard, we just point at it.
+// Only events synced from the API have a console id; manual entries get no link.
+function discountsConsoleUrl(humanitixEventId: string): string {
+  return `https://console.humanitix.com/console/events/${encodeURIComponent(humanitixEventId)}/discounts/codes`;
 }
 
 function fmtDate(iso: string | null): string {
@@ -200,6 +208,17 @@ function EventRow({ event, onChanged, past = false }: { event: EventAdmin; onCha
               <button className="primary" onClick={download} disabled={busy}>
                 {busy ? 'Working…' : 'Download codes CSV'}
               </button>
+              {event.humanitixEventId && (
+                <a
+                  className="secondary as-button"
+                  href={discountsConsoleUrl(event.humanitixEventId)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Opens this event's Promote → Discounts → CSV upload page in Humanitix"
+                >
+                  Open in Humanitix
+                </a>
+              )}
               {event.exportedCount > 0 && (
                 <button className="secondary" onClick={undo} disabled={busy} title="Use this if the CSV was downloaded but never uploaded to Humanitix">
                   Undo download
