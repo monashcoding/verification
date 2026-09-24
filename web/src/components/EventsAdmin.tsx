@@ -79,6 +79,39 @@ function discountsConsoleUrl(humanitixEventId: string): string {
   return `https://console.humanitix.com/console/events/${encodeURIComponent(humanitixEventId)}/discounts/codes`;
 }
 
+// Inline SVGs rather than an icon dependency — two glyphs don't justify one.
+// Decorative: every use sits on a button carrying its own aria-label.
+const iconProps = {
+  viewBox: '0 0 24 24',
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 1.75,
+  strokeLinecap: 'round',
+  strokeLinejoin: 'round',
+  'aria-hidden': true,
+  focusable: false,
+} as const;
+
+function UndoIcon() {
+  return (
+    <svg {...iconProps}>
+      <path d="M9 14 4 9l5-5" />
+      <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg {...iconProps}>
+      <path d="M3 6h18" />
+      <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+      <path d="M10 11v6M14 11v6" />
+    </svg>
+  );
+}
+
 function fmtDate(iso: string | null): string {
   if (!iso) return '';
   const d = new Date(iso);
@@ -220,19 +253,26 @@ function EventRow({ event, onChanged, past = false }: { event: EventAdmin; onCha
                 </a>
               )}
               {event.exportedCount > 0 && (
-                <button className="secondary" onClick={undo} disabled={busy} title="Use this if the CSV was downloaded but never uploaded to Humanitix">
-                  Undo download
+                <button
+                  className="secondary icon-button"
+                  onClick={undo}
+                  disabled={busy}
+                  aria-label="Undo download"
+                  title="Undo download — use this if the CSV was downloaded but never uploaded to Humanitix"
+                >
+                  <UndoIcon />
                 </button>
               )}
             </>
           )}
           <button
-            className="secondary danger"
+            className="secondary danger icon-button"
             onClick={remove}
             disabled={busy}
-            title="Hide this event from the verify pages. Codes are kept and it can be restored."
+            aria-label="Remove event"
+            title="Remove — hide this event from the verify pages. Codes are kept and it can be restored."
           >
-            Remove
+            <TrashIcon />
           </button>
         </div>
       )}

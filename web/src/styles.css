@@ -194,6 +194,20 @@ button:active, .as-button:active { transform: translateY(1px); }
   border-radius: 8px;
 }
 .link-button:hover { color: var(--text); }
+/* Square icon-only control for the secondary actions in a crowded row, so a row
+   of four buttons still fits its box. The label lives in aria-label + title.
+   Sized to the height of a text button so the row reads as one control group —
+   the saving is in width (~150px of label down to a 50px square). */
+.icon-button {
+  padding: 0;
+  width: 3.1rem;
+  height: 3.1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.icon-button svg { width: 1.15rem; height: 1.15rem; display: block; }
 button:disabled { opacity: 0.45; cursor: default; transform: none; }
 button:disabled:hover { background: var(--accent); }
 .secondary:disabled:hover { background: transparent; border-color: var(--border); }
@@ -397,7 +411,11 @@ code {
 }
 .event-row:hover { border-color: var(--border); background: var(--card-hover); }
 .event-row strong { font-weight: 700; }
-.event-row-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: flex-end; flex-shrink: 0; }
+/* min-width:0 (not flex-shrink:0) so a narrow card makes the buttons wrap onto
+   a second line instead of overflowing the card's right edge, and flex-start so
+   those wrapped lines pack from the left rather than raggedly right-aligning.
+   The group still sits right on a wide row — .event-row space-betweens it. */
+.event-row-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: flex-start; min-width: 0; }
 .card h4 {
   margin: 1.75rem 0 0;
   font-size: 0.8rem;
