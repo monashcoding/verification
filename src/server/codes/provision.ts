@@ -7,8 +7,10 @@ import { generateCode } from './generate.js';
 /**
  * Provision a member_event_codes row for every ENROLLED roster row (current
  * snapshot, with a card number) that doesn't already have one for this event
- * (§9). Idempotent — the UNIQUE(roster_id, event_id) constraint plus
- * onConflictDoNothing means re-running only fills gaps. Returns rows inserted.
+ * (§9). Idempotent across roster imports too: "already has one" is judged by
+ * card number, so a member keeps the single code that was actually uploaded to
+ * Humanitix instead of gaining a fresh unexported row per import. Returns rows
+ * inserted.
  */
 export async function provisionEventCodes(eventId: number): Promise<number> {
   const batch = await latestImportBatchId();
@@ -27,11 +29,32 @@ export async function provisionEventCodes(eventId: number): Promise<number> {
 
   if (enrolled.length === 0) return 0;
 
-  const values = enrolled.map((r) => ({
-    rosterId: r.id,
-    eventId,
-    code: generateCode(r.cardNumber, eventId),
-  }));
+  // Who already has a code for this event, by card number rather than row id.
+  // UNIQUE(roster_id, event_id) only stops duplicates within one import batch —
+  // a new batch gives the same member a new row id, so without this every roster
+  // import would mint a second, unexported row carrying the identical code and
+  // knock already-uploaded members back to the plain ticket link.
+  const existing = await db
+    .selectDistinct({ cardNumber: roster.cardNumber })
+    .from(memberEventCodes)
+    .innerJoin(roster, eq(roster.id, memberEventCodes.rosterId))
+    .where(eq(memberEventCodes.eventId, eventId));
+  const covered = new Set(existing.map((r) => r.cardNumber).filter((c): c is string => c !== null));
+
+  const values = enrolled
+    .filter((r) => {
+      if (r.cardNumber === null || covered.has(r.cardNumber)) return false;
+      // Also guards a card number appearing twice within one export file.
+      covered.add(r.cardNumber);
+      return true;
+    })
+    .map((r) => ({
+      rosterId: r.id,
+      eventId,
+      code: generateCode(r.cardNumber, eventId),
+    }));
+
+  if (values.length === 0) return 0;
 
   const inserted = await db
     .insert(memberEventCodes)
@@ -68,9 +91,16 @@ function csvEscape(v: string | number): string {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-function rowsToCsv(rows: { code: string; quantity: number; maxUsePerOrder: number }[]): string {
+export function rowsToCsv(rows: { code: string; quantity: number; maxUsePerOrder: number }[]): string {
   const lines = [CSV_HEADER];
+  // Exported only so the dedupe is unit-testable without a database.
+  // One line per distinct code. Rows can repeat a code if an earlier roster
+  // import already duplicated it (see provisionEventCodes) — Humanitix should
+  // never be handed the same code twice in one upload.
+  const seen = new Set<string>();
   for (const r of rows) {
+    if (seen.has(r.code)) continue;
+    seen.add(r.code);
     lines.push([r.code, r.quantity, r.maxUsePerOrder].map(csvEscape).join(','));
   }
   return lines.join('\n') + '\n';

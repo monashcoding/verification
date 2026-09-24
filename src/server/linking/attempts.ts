@@ -13,7 +13,7 @@ export const MAX_FAILED_ATTEMPTS = 20;
 export const COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
 
 export interface AttemptState {
-  /** Effective failed count after applying the 24h reset window. */
+  /** Effective failed count after applying the 1h reset window. */
   failedCount: number;
   /** True once the cap is reached within the cooldown window. */
   locked: boolean;

@@ -36,6 +36,13 @@
       "when": 1789882608186,
       "tag": "0004_colossal_steel_serpent",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790270848126,
+      "tag": "0005_supreme_human_cannonball",
+      "breakpoints": true
     }
   ]
 }

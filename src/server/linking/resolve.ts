@@ -1,7 +1,7 @@
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { memberLinks, memberEventCodes, auditLog, type Event } from '../db/schema.js';
-import { findEnrolledByEmail } from '../roster/query.js';
+import { roster, memberLinks, memberEventCodes, auditLog, type Event } from '../db/schema.js';
+import { findEnrolledByEmail, currentRosterIdForCard } from '../roster/query.js';
 import type { MacUser } from '../auth/mac-auth.js';
 import { getAttemptState, type AttemptState } from './attempts.js';
 
@@ -10,7 +10,10 @@ import { getAttemptState, type AttemptState } from './attempts.js';
 //   • eventOutcome — for a given event, what do we hand this person? (per-event)
 
 export type LinkState =
-  | { status: 'linked'; rosterId: number }
+  // `rosterId` is the row in the *current* snapshot (re-found via cardNumber),
+  // so it stays valid across roster imports. `cardNumber` is the stable key and
+  // is null only for a link made against a roster row that had no student ID.
+  | { status: 'linked'; rosterId: number; cardNumber: string | null }
   // Show the student-ID field. `attempts` drives the "attempts remaining" copy.
   | { status: 'needs_student_id'; attempts: AttemptState }
   // Attempts exhausted this cooldown window → treated as not-a-member for now,
@@ -25,12 +28,35 @@ export type EventOutcome =
   // deliberate (no member pricing), so there's nothing to wait for.
   | { state: 'not_member'; ticketUrl: string };
 
-async function findLink(macUserId: string): Promise<{ rosterId: number } | null> {
+async function findLink(
+  macUserId: string,
+): Promise<{ rosterId: number; cardNumber: string | null } | null> {
   const [row] = await db
-    .select({ rosterId: memberLinks.rosterId })
+    .select({ rosterId: memberLinks.rosterId, cardNumber: memberLinks.cardNumber })
     .from(memberLinks)
     .where(eq(memberLinks.macUserId, macUserId));
   return row ?? null;
+}
+
+/**
+ * Turn a stored link into the live `linked` state. The stored roster_id points at
+ * the snapshot row from linking time, which a later roster import supersedes, so
+ * re-find the current row by card number. If the card number is gone from the
+ * current snapshot (left the club, or an export hiccup) we keep the stored id —
+ * the link itself is never re-checked or torn down (§13), and with no code rows
+ * for a stale row the outcome degrades to the plain ticket link on its own.
+ */
+async function toLinkedState(link: {
+  rosterId: number;
+  cardNumber: string | null;
+}): Promise<LinkState> {
+  if (!link.cardNumber) return { status: 'linked', rosterId: link.rosterId, cardNumber: null };
+  const current = await currentRosterIdForCard(link.cardNumber);
+  return {
+    status: 'linked',
+    rosterId: current ?? link.rosterId,
+    cardNumber: link.cardNumber,
+  };
 }
 
 /**
@@ -44,14 +70,14 @@ async function findLink(macUserId: string): Promise<{ rosterId: number } | null>
  */
 export async function resolveLinkState(user: MacUser, now = new Date()): Promise<LinkState> {
   const existing = await findLink(user.macUserId);
-  if (existing) return { status: 'linked', rosterId: existing.rosterId };
+  if (existing) return toLinkedState(existing);
 
   // Automatic email match — only the ~10% whose login email is their roster email.
   if (user.email) {
     const match = await findEnrolledByEmail(user.email);
     if (match) {
       const rosterId = await createLink(user.macUserId, match.id, 'email_auto');
-      return { status: 'linked', rosterId };
+      return { status: 'linked', rosterId, cardNumber: match.cardNumber };
     }
   }
 
@@ -69,9 +95,16 @@ export async function createLink(
   rosterId: number,
   via: 'email_auto' | 'student_id' | 'manual_review',
 ): Promise<number> {
+  // Snapshot the card number alongside the row id: the id is superseded by the
+  // next roster import, the card number is what re-finds them after one.
+  const [target] = await db
+    .select({ cardNumber: roster.cardNumber })
+    .from(roster)
+    .where(eq(roster.id, rosterId));
+
   const inserted = await db
     .insert(memberLinks)
-    .values({ macUserId, rosterId, linkedVia: via })
+    .values({ macUserId, rosterId, cardNumber: target?.cardNumber ?? null, linkedVia: via })
     .onConflictDoNothing({ target: memberLinks.macUserId })
     .returning({ rosterId: memberLinks.rosterId });
 
@@ -105,10 +138,23 @@ export async function resolveEventOutcome(linkState: LinkState, event: Event): P
     return { state: 'not_member', ticketUrl: event.humanitixEventUrl };
   }
 
-  const [code] = await db
-    .select({ code: memberEventCodes.code, exportedAt: memberEventCodes.exportedAt })
-    .from(memberEventCodes)
-    .where(and(eq(memberEventCodes.rosterId, linkState.rosterId), eq(memberEventCodes.eventId, event.id)));
+  // Match on card number across every import batch, not on the current row id:
+  // a code provisioned before a roster import hangs off that older batch's row,
+  // and it is still the code sitting in Humanitix's uploaded CSV. Prefer an
+  // exported row when more than one batch has one (they carry the same code —
+  // it is derived from card_number + event_id).
+  const [code] = linkState.cardNumber
+    ? await db
+        .select({ code: memberEventCodes.code, exportedAt: memberEventCodes.exportedAt })
+        .from(memberEventCodes)
+        .innerJoin(roster, eq(roster.id, memberEventCodes.rosterId))
+        .where(and(eq(roster.cardNumber, linkState.cardNumber), eq(memberEventCodes.eventId, event.id)))
+        .orderBy(sql`${memberEventCodes.exportedAt} asc nulls last`)
+        .limit(1)
+    : await db
+        .select({ code: memberEventCodes.code, exportedAt: memberEventCodes.exportedAt })
+        .from(memberEventCodes)
+        .where(and(eq(memberEventCodes.rosterId, linkState.rosterId), eq(memberEventCodes.eventId, event.id)));
 
   // Unexported codes were never handed to an officer to upload, so a discount
   // link would fail at checkout — send them to the normal tickets instead.

@@ -74,9 +74,18 @@ export const events = pgTable('events', {
 export const memberLinks = pgTable('member_links', {
   id: serial('id').primaryKey(),
   macUserId: text('mac_user_id').notNull().unique(),
+  // The roster row as it stood when the link was made. Roster imports replace
+  // the snapshot wholesale with brand-new row ids, so this goes stale the next
+  // time someone uploads a roster — it is kept for the audit trail, not used as
+  // the lookup key. Resolve the live row through card_number instead.
   rosterId: integer('roster_id')
     .notNull()
     .references(() => roster.id),
+  // The stable identity across import batches: a member's student ID does not
+  // change, so this is what re-finds them in the current snapshot. Nullable
+  // because a roster row can legitimately have no card number (an email_auto
+  // match on an export row missing the ID) — such links fall back to roster_id.
+  cardNumber: text('card_number'),
   linkedVia: linkedVia('linked_via').notNull(),
   linkedAt: timestamp('linked_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -108,7 +117,7 @@ export const memberEventCodes = pgTable(
 
 // ── roster_link_attempts (§4) ────────────────────────────────────────────────
 // Rate limiting for the student-ID field. Persisted (not session-scoped) so a
-// page reload does not reset the counter. Cap 5, 24h cooldown from last attempt.
+// page reload does not reset the counter. Cap 20, 1h cooldown from last attempt.
 export const rosterLinkAttempts = pgTable('roster_link_attempts', {
   macUserId: text('mac_user_id').primaryKey(),
   failedCount: integer('failed_count').notNull().default(0),

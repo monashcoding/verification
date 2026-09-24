@@ -55,3 +55,24 @@ export async function findEnrolledByStudentId(studentId: string): Promise<Roster
     .limit(1);
   return row ?? null;
 }
+
+/**
+ * Re-find a member in the *current* snapshot by their student ID, regardless of
+ * enrollment status. Imports replace the roster wholesale with new row ids, so
+ * this is how a link made against an older batch still resolves to a live row.
+ *
+ * Deliberately not filtered to ENROLLED: membership lapsing is passive (§9) and
+ * must not orphan an existing link. Returns null if the card number is absent
+ * from the current snapshot entirely.
+ */
+export async function currentRosterIdForCard(cardNumber: string): Promise<number | null> {
+  const batch = await latestImportBatchId();
+  if (!batch) return null;
+  const [row] = await db
+    .select({ id: roster.id })
+    .from(roster)
+    .where(and(eq(roster.importBatchId, batch), eq(roster.cardNumber, cardNumber)))
+    .orderBy(desc(roster.id))
+    .limit(1);
+  return row?.id ?? null;
+}
