@@ -1,0 +1,26 @@
+# Disposable Postgres for the integration tests. Deliberately separate from
+# docker-compose.yml: a throwaway port (55432, so it cannot collide with a local
+# Postgres on 5432), tmpfs storage so nothing survives the container, and a
+# database name ending in _test — the harness refuses to truncate anything else.
+#
+#   npm run test:db:up && npm test
+#
+# Integration tests skip themselves when this isn't running, so `npm test` stays
+# green without Docker.
+
+services:
+  test-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: mac_membership_verify
+      POSTGRES_PASSWORD: mac_membership_verify
+      POSTGRES_DB: mac_membership_verify_test
+    ports:
+      - "55432:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mac_membership_verify"]
+      interval: 1s
+      timeout: 3s
+      retries: 30

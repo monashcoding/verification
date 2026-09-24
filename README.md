@@ -34,10 +34,23 @@ npm run db:generate           # generate SQL migrations from the Drizzle schema
 npm run db:migrate            # apply them
 npm run dev                   # start the API on :3000
 npm run dev:web               # start the Vite SPA on :5173 (proxies /api → :3000)
-npm test                      # unit tests: parser, safety gate, rate limit, codes (no DB)
+npm test                      # unit + integration tests (integration skip without a test DB)
+npm run test:db:up            # throwaway Postgres on :55432 for the integration tests
+npm run test:db:down          # stop it (tmpfs — nothing persists anyway)
 npm run build                 # compile server + build SPA into dist/ (single container)
 npm run cron:daily-diff       # Trigger B (§9) + retire past events — wire to a scheduled job
 ```
+
+## Tests
+
+Unit tests cover the pure logic (parser, safety gate, rate limit, code generation, CSV shape).
+Integration tests (`*.db.test.ts`) run against a real Postgres, because the membership logic is
+mostly SQL — a roster import silently orphaning every `member_link` was a bug no mock would have
+caught. `npm run test:db:up` starts a disposable database on port 55432; without it those tests
+skip rather than fail, so `npm test` works on a fresh clone.
+
+The harness (`src/test/db.ts`) truncates tables between tests and refuses to run against any
+database whose name doesn't end in `_test`, so it can't be pointed at a real one by accident.
 
 Events whose date has passed are retired automatically (`active → false`) — by the daily cron,
 and again whenever the admin events list is loaded. Nothing is deleted: the row, its codes and
